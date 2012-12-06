@@ -215,15 +215,6 @@
                  (conj closed endp))))
       nil)))
 
-#_(defn smooth-route [start goal walk-speeds w]
-  (loop [rawpath (route start goal walk-speeds w)
-         respath []]
-    (if (< (count rawpath) 2)
-      (concat respath rawpath)
-      (let [npath (smooth-path (or (peek respath) start) rawpath w)]
-        (recur (rest npath)
-               (conj respath (first npath)))))))
-
 (defn step-bullets&entities [f pf bullet-speed bus entities]
   (ttmap (fn [bullets entity]
            (let [p (pf entity)

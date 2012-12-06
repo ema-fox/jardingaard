@@ -31,8 +31,6 @@
 
 (def world-state (ref nil))
 
-(def dbg-foo (ref [1 1]))
-
 (def save-path)
 
 (def future-messages (ref {}))

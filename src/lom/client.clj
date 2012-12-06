@@ -24,16 +24,6 @@
 
 (def tick-duration 33)
 
-#_(defn fill-rect! [^GL2 gl [p0 p1] [s0 s1]]
-  (.glTexCoord2f gl 0 1)
-  (.glVertex2f gl p0 p1)
-  (.glTexCoord2f gl 0 0)
-  (.glVertex2f gl p0 (+ p1 s1))
-  (.glTexCoord2f gl 1 0)
-  (.glVertex2f gl (+ p0 s0) (+ p1 s1))
-  (.glTexCoord2f gl 1 1)
-  (.glVertex2f gl (+ p0 s0) p1))
-
 (defn add-rect! [^FloatBuffer buf [p0 p1] [s0 s1]]
   (doseq [n [p0 p1
              p0 (+ p1 s1)
@@ -53,9 +43,6 @@
 
 (defn set-color! [^GL2 gl red green blue]
   (.glColor3f gl (/ red 255.0) (/ green 255.0) (/ blue 255.0)))
-
-#_(defn draw-image! [^Graphics2D g ^BufferedImage img [p0 p1]]
-  (.drawImage g img (int p0) (int p1) nil))
 
 (def fr-ts (ref '()))
 
@@ -77,8 +64,6 @@
 
 (def fr-counter (loud-agent nil))
 
-(declare can)
-
 (defn count-inc [c]
   (Thread/sleep (let [t (+ tick-duration
                            (condp = @skew
@@ -91,38 +76,6 @@
                   t))
   (send-off fr-counter count-inc)
   (inc c))
-
-#_(def tile-cs {:wall [240 60 30]
-              :windowed-wall [170 50 5]
-              :dirt [200 150 10]
-              :door [60 50 10]
-              :grass [255 255 255]
-              :tall-grass [20 100 10]
-              :shrub [0 80 10]
-              nil [200 0 200]})
-
-#_(defn repaint-tile! [p]
-  (let [chunkp (mult (map int (div p 25)) 25)
-        relp (minus p chunkp)
-        ^BufferedImage img (@bgimgs chunkp)]
-    (if img
-      (let [world (:world @state)
-            ^Graphics2D g (.createGraphics img)]
-        (condp = (get-in world p)
-          :wall (.setColor g (Color. 240 60 30))
-          :windowed-wall (.setColor g (Color. 170 50 5))
-          :dirt (.setColor g (Color. 100 80 40))
-          :door (.setColor g (Color. 60 50 10))
-          :grass (.setColor g (Color. 20 200 60))
-          :shrub (.setColor g (Color. 50 160 20))
-          (set-color! g 255 0 255))
-        (fill-rect! g (mult relp 20) [20 20])
-        (.dispose g)))))
-
-#_(defn repaint-bgimg! []
-  (doseq [p0 (range (count (:world @data)))
-          p1 (range (count (:world @data)))]
-    (repaint-tile! [p0 p1])))
 
 (defn step-to [[start st] end msgs]
   (reduce (fn [sta n]
@@ -150,12 +103,6 @@
   (.bind tex gl)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MIN_FILTER GL2/GL_NEAREST)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MAG_FILTER GL2/GL_NEAREST))
-
-#_(defmacro gl-with [gl foo & body]
-  `(let [gl# ~gl]
-     (.glBegin gl# ~foo)
-     ~@body
-     (.glEnd gl#)))
 
 (defn tile-groups [world pfoo [s0 s1]]
   (group-by #(get-in world %)
