@@ -1,4 +1,5 @@
-(ns lom.util)
+(ns lom.util
+  (:use [clojure.set :only [union]]))
 
 (def tau (* 2 Math/PI))
 
@@ -12,7 +13,7 @@
                           (f y x))
                         [y] xs)]
     [(first (last foo))
-     (map second foo)]))
+     (map second (rest foo))]))
 
 (defn insert-at [i xs x]
   (concat (take i xs) [x] (drop i xs)))
@@ -95,6 +96,8 @@
   [(arc<-dir (direction [0 0] p))
    (distance [0 0] p)])
 
+(set! *warn-on-reflection* true)
+
 (defn ^:static dvec<-avec [[a dist]]
   (mult (dir<-arc a) dist))
 
@@ -110,3 +113,60 @@
   (prn msg x)
   x)
 
+(defn loud-agent [& args]
+  (apply agent (concat args
+                       [:error-handler (fn [a e]
+                                         (prn a e))])))
+
+(defn forkIO [f] (.start (Thread. f))) ; cool bilingual joke or just tacky? 
+
+(defn prng [& args]
+  (let [foo (apply bit-xor (map (fn [x]
+                                  (let [bar (if (sequential? x)
+                                              (apply prng x)
+                                              x)]
+                                    (bit-xor bar
+                                             (bit-shift-left bar (mod bar 2))
+                                             (bit-shift-left bar (mod bar 3))
+                                             (bit-shift-right bar 3))))
+                                (conj args 13)))]
+    (bit-xor foo (mod foo 7)
+             (bit-shift-right foo 1))))
+
+(declare gen-patch)
+
+(defn gen-map-patch [a b]
+  (reduce (fn [res k]
+            (if (not= (a k) (b k))
+              (assoc res k (gen-patch (a k) (b k)))
+              res))
+          {}
+          (union (set (keys a)) (keys b))))
+
+(defn gen-vec-patch [a b]
+  (into {} (keep (fn [k]
+                   (if (not= (a k) (b k))
+                     [k (gen-patch (a k) (b k))]))
+                 (range (count a)))))
+
+(defn gen-patch [a b]
+  (cond (and (map? a)
+             (map? b))
+        (gen-map-patch a b)
+        (and (vector? a)
+             (vector? b)
+             (= (count a) (count b)))
+        (gen-vec-patch a b)
+        true
+        [b]))
+
+(defn apply-patch [a p]
+  (cond (vector? p)
+        (first p)
+        (map? p)
+        (reduce (fn [b [k v]]
+                  (if (= v [nil])
+                    (dissoc b k)
+                    (assoc b k (apply-patch (a k) v))))
+                a
+                p)))
