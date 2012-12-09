@@ -1,4 +1,4 @@
-(ns lom.util
+(ns jardingaard.util
   (:use [clojure.set :only [union]]))
 
 (def tau (* 2 Math/PI))

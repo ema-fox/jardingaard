@@ -1,5 +1,5 @@
-(ns lom.server
-  (:use [lom util shared]
+(ns jardingaard.server
+  (:use [jardingaard util shared]
         clojure.java.io)
   (:import [java.net ServerSocket Socket]
            [java.util Date]
@@ -167,11 +167,9 @@
                             (fn a [pings]
                               (take 10 (conj pings (- @fr-counter (second m))))))
                      (cond (< (+ (nth m 2) (half-median-ping pid)) @fr-counter)
-                           (do (send-client conn [:skew :plus])
-                               (alter dbg-foo update-in [0] inc))
+                           (send-client conn [:skew :plus])
                            (> (+ (nth m 2) (half-median-ping pid)) @fr-counter)
-                           (do (alter dbg-foo update-in [1] inc)
-                               (send-client conn [:skew :minus]))))
+                           (send-client conn [:skew :minus])))
                  :save (spit save-path (second @world-state))
                  :name (do (add-player! pid (second m))
                            (log [:name (second m) @conn]))

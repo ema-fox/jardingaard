@@ -1,8 +1,8 @@
-(ns lom.client
+(ns jardingaard.client
   (:gen-class)
   (:use [seesaw core]
         [clojure.java io]
-        [lom util shared])
+        [jardingaard util shared])
   (:import [java.net Socket]
            [java.util Date]
            [java.io OutputStreamWriter InputStreamReader]
@@ -49,6 +49,8 @@
 (def bgimgs (ref {}))
 
 (def ^Socket conn)
+
+(def messenger (loud-agent nil))
 
 (def state (ref nil))
 
@@ -252,10 +254,11 @@
   (System/exit 1))
 
 (defn msg [m]
-  (try 
-    (binding [*out* (OutputStreamWriter. (.getOutputStream conn))]
-      (prn m))
-    (catch java.net.SocketException e)))
+  (send-off messenger (fn [a]
+                        (try 
+                          (binding [*out* (OutputStreamWriter. (.getOutputStream conn))]
+                            (prn m))
+                          (catch java.net.SocketException e)))))
 
 (add-watch fr-counter :send-msgs (fn [_ _ n nn]
                                    (msg [:cmds (or n nn) (@cl-messages n)])))
@@ -290,13 +293,13 @@
     (add-msg [:walk (get-event-p e)])
     nil))
 
-(defn load-textures! []
+(defn load-textures! [class-loader]
   (def txtr (into {} (map (fn [name]
                             [(keyword name)
-                             (TextureIO/newTexture (file (resource (str name ".png"))) false)])
+                             (TextureIO/newTexture (resource (str name ".png") class-loader)
+                                                   false "png")])
                           ['grass 'tall-grass 'dirt 'shrub 'door 'wall 'windowed-wall 'tree
-                           'bunny 'deadbunny 'zombie 'player 'trunk
-                           'lu-tall-grass 'ru-tall-grass 'rd-tall-grass 'ld-tall-grass]))))
+                           'bunny 'deadbunny 'zombie 'player 'trunk]))))
 
 (defn handle-msg [d]
   (dosync
@@ -342,10 +345,11 @@
               (.setPreferredSize (Dimension. 600 600)))
         fr (doto (Frame.)
              (.add can))
-        drawer (loud-agent nil)]
+        drawer (loud-agent nil)
+        class-loader (.getContextClassLoader (Thread/currentThread))]
     (.addGLEventListener can (proxy [GLEventListener] []
                                (init [d]
-                                 (load-textures!))
+                                 (load-textures! class-loader))
                                (display [^GLAutoDrawable d]
                                  (let [gl (.getGL2 (.getGL d))]
                                    (render gl @size)))

@@ -1,5 +1,5 @@
-(ns lom.shared
-  (:use [lom util]))
+(ns jardingaard.shared
+  (:use [jardingaard util]))
 
 (def num-zombies 10)
 (def num-bunnies 10)
@@ -105,7 +105,7 @@
                 (map (fn [y]
                        [x y])
                      (range (min ya yb) (inc (max ya yb))))))
-            (butlast xline)
+            xline
             (rest xline))))
 
 (defn test-line [start goal w]
