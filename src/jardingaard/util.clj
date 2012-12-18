@@ -38,9 +38,12 @@
 (defn ^:static div [[p0 p1] x]
   [(/ p0 x) (/ p1 x)])
 
+(defn floor [x]
+  (int (Math/floor x)))
+
 (defn round [[p0 p1]]
-  [(int (+ 0.5 p0))
-   (int (+ 0.5 p1))])
+  [(floor (+ 0.5 p0))
+   (floor (+ 0.5 p1))])
 
 (defn mult2 [[pa0 pa1] [pb0 pb1]]
   [(* pa0 pb0) (* pa1 pb1)])

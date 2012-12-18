@@ -70,12 +70,11 @@
       0)))
 
 (defn update-clients []
-  (dosync
-   (let [patch (gen-patch @player-state @world-state)
-         m [:patch-state patch]]
-     (ref-set player-state @world-state)
-     (doseq [[conn pid] @conns]
-       (send-client conn m)))))
+  (let [patch (gen-patch @player-state @world-state)
+        m [:patch-state patch]]
+    (ref-set player-state @world-state)
+    (doseq [[conn pid] @conns]
+      (send-client conn m))))
 
 (defn add-msg [delay msg]
    (alter (if (< delay 100)
@@ -126,8 +125,7 @@
 
 (defn update-messages! []
   (let [patch (gen-patch @player-message-st @messages)]
-    (dosync
-     (ref-set player-message-st @messages))
+    (ref-set player-message-st @messages)
     (doseq [[conn pid] @conns]
       (send-client conn [:patch-messages patch (@latest-player-message pid)]))))
 
@@ -216,4 +214,3 @@
   (def socket (ServerSocket. 8282))
   (forkIO accept)
   (forkIO steps))
-

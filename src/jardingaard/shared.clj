@@ -1,8 +1,8 @@
 (ns jardingaard.shared
   (:use [jardingaard util]))
 
-(def num-zombies 10)
-(def num-bunnies 10)
+(def num-zombies 0)
+(def num-bunnies 50)
 
 (def step-fns [])
 
@@ -93,36 +93,20 @@
                goal)
         [d0 d1] (minus goal start)
         slope (/ d1 d0)
-        [a b] (sort [(first start) (first goal)])
+        [^Number a ^Number b] (sort [(first start) (first goal)])
         xline (concat [a]
-                      (range (+ 0.5 (int (+ 0.5 a)))
-                             (+ 0.5 (int (+ 0.5 b))))
+                      (range (+ 0.5 (floor (+ 0.5 a)))
+                             (+ 0.5 (floor (+ 0.5 b))))
                       [b])]
     (mapcat (fn [a b]
-              (let [x (int (/ (+ a b 1) 2))
-                    ya (int (+ (second start) (* slope (- a (first start))) 0.5))
-                    yb (int (+ (second start) (* slope (- b (first start))) 0.5))]
+              (let [x (floor (/ (+ a b 1) 2))
+                    ya (floor (+ (second start) (* slope (- a (first start))) 0.5))
+                    yb (floor (+ (second start) (* slope (- b (first start))) 0.5))]
                 (map (fn [y]
                        [x y])
                      (range (min ya yb) (inc (max ya yb))))))
             xline
             (rest xline))))
-
-(defn test-line [start goal w]
-  (every? #(walkable? (get-in w %)) (line-affects start goal)))
-
-(defn smooth-path [start path w]
-  (if path
-    (loop [i (min 10 (dec (count path)))]
-      (let [subgoal (nth path i)]
-        (if (or (every? #(test-line (plus start %) (plus subgoal %) w)
-                        [[-0.4 -0.4]
-                         [-0.4 0.4]
-                         [0.4 0.4]
-                         [0.4 -0.4]])
-                (= i 0))
-          (drop i path)
-          (recur (dec i)))))))
 
 (defstep [bullets world bullet-speed]
   (assoc state
@@ -143,7 +127,7 @@
 (defn new-pos [{:keys [p path] :as entity} walk-speeds world]
   (let [npath (if (and (first path)
                        (< (distance p (first path)) 0.1))
-                (smooth-path p path world);(rest path)
+                (rest path)
                 path)]
     (assoc (if (first npath)
              (assoc entity
@@ -176,13 +160,33 @@
 
 (defrecord path-stub [ps d h])
 
+(def directions (apply concat (take 4 (iterate #(map (fn [[p0 p1]]
+                                                       [p1 (* -1 p0)])
+                                                     %)
+                                               [[1 0]
+                                                [1 1]
+                                                [2 1]
+                                                [1 2]
+                                                [3 1]
+                                                [1 3]
+                                                [3 2]
+                                                [2 3]]))))
+
+(def tdstore (into {} (map (fn [d]
+                             [d (disj (set (line-affects [0 0] d))
+                                      [0 0])])
+                           directions)))
+
+(defn test-direction [p d w]
+  (every? #(walkable? (get-in w (plus p %))) (tdstore d)))
+
 (defn route [start goal walk-speeds w]
   {:pre [(every? integer? start)
          (every? integer? goal)]}
-  (loop [open {start (path-stub. [start]
+  (loop [open {start (path-stub. (list start)
                                  0
                                  (manhatten start goal))}
-         other-open {goal (path-stub. [goal]
+         other-open {goal (path-stub. (list goal)
                                       0
                                       (manhatten start goal))}
          swapped false
@@ -195,8 +199,8 @@
                                             open)]
         (if-let [other-side (other-open endp)]
           (if swapped
-            (concat (:ps other-side) (rest (reverse ps)))
-            (concat ps (rest (reverse (:ps other-side)))))
+            (concat (reverse (:ps other-side)) (rest ps))
+            (concat (reverse ps) (rest (:ps other-side))))
           (recur other-open
                  (merge-with (fn b [a b]
                                (if (< (+ (:d a) (:h a))
@@ -204,13 +208,17 @@
                                  a
                                  b))
                              (dissoc open endp)
-                             (into {} (for [p (filter #(and (not (closed %))
-                                                            (walkable? (get-in w %))
-                                                            (< (manhatten % goal) 30))
-                                                      (ngbrs endp w))]
+                             (into {} (for [p (->> directions
+                                                   (filter #(and (not (closed (plus endp %)))
+                                                                 (< (manhatten (plus endp %) goal) 30)
+                                                                 (test-direction endp % w)))
+                                                   (map #(plus endp %)))]
                                         [p (path-stub. (conj ps p)
-                                                       (+ d (walk-speeds (get-in w p)))
-                                                       (manhatten p goal))])))
+                                                       (+ d (distance endp p))
+                                                       ;(+ d (walk-speeds (get-in w p)))
+                                                       (distance p (if swapped
+                                                                     start
+                                                                     goal)))])))
                  (not swapped)
                  (conj closed endp))))
       nil)))
@@ -284,7 +292,7 @@
                     (cond (and (first path)
                                (< 0.1 (distance (last path) p)))
                           (new-pos bunny human-walk-speeds world)
-                          (= 0 (mod (prng *seed* seed (round p)) 99))
+                          (= 0 (mod (prng *seed* seed (round p)) 9))
                           (let [foo0 (mod (prng *seed* seed 4321 (round p)) 11)
                                 foo1 (mod (prng *seed* seed 1234 (round p)) 11)
                                 goal (round (plus p (minus [foo0 foo1] [5 5])))]
@@ -618,6 +626,7 @@
 (defn step [state msgs]
   {:pre [(:world state)]
    :post [(:world %)]}
+  ;(prn dbg1)
   (reduce (fn [st f]
             (f st))
           (exec-messages state msgs)
