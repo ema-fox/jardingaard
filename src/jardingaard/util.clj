@@ -26,7 +26,12 @@
 (defn ^:static minus [[pa0 pa1] [pb0 pb1]]
   [(- pa0 pb0) (- pa1 pb1)])
 
-(defn ^:static plus
+(defn ^{:static true
+        :inline (fn [pa pb]
+                  `(let [[pa0# pa1#] ~pa
+                         [pb0# pb1#] ~pb]
+                     [(+ pa0# pb0#) (+ pa1# pb1#)]))}
+  plus
   ([[pa0 pa1] [pb0 pb1]]
      [(+ pa0 pb0) (+ pa1 pb1)])
   ([]
@@ -38,10 +43,10 @@
 (defn ^:static div [[p0 p1] x]
   [(/ p0 x) (/ p1 x)])
 
-(defn floor [x]
+(defn ^:static floor [x]
   (int (Math/floor x)))
 
-(defn round [[p0 p1]]
+(defn ^:static round [[p0 p1]]
   [(floor (+ 0.5 p0))
    (floor (+ 0.5 p1))])
 
@@ -56,10 +61,9 @@
       [(/ d0 dist) (/ d1 dist)])
     [0 0]))
     
-
-(defn ^:static distance [[pa0 pa1] [pb0 pb1]]
-  (let [d0 (- pb0 pa0)
-        d1 (- pb1 pa1)
+(defn ^:static ^Float distance [[pa0 pa1] [pb0 pb1]]
+  (let [d0 (- (float pb0) (float pa0))
+        d1 (- (float pb1) (float pa1))
         dist (Math/sqrt (+ (* d0 d0) (* d1 d1)))]
     dist))
 
@@ -123,16 +127,16 @@
 
 (defn forkIO [f] (.start (Thread. f))) ; cool bilingual joke or just tacky? 
 
-(defn prng [& args]
-  (let [foo (apply bit-xor (map (fn [x]
-                                  (let [bar (if (sequential? x)
-                                              (apply prng x)
-                                              x)]
-                                    (bit-xor bar
-                                             (bit-shift-left bar (mod bar 2))
-                                             (bit-shift-left bar (mod bar 3))
-                                             (bit-shift-right bar 3))))
-                                (conj args 13)))]
+(defn ^Integer prng [& args]
+  (let [^Integer foo (apply bit-xor (map (fn [x]
+                                           (let [^Integer bar (if (sequential? x)
+                                                                (apply prng x)
+                                                                x)]
+                                             (bit-xor bar
+                                                      (bit-shift-left bar (mod bar 2))
+                                                      (bit-shift-left bar (mod bar 3))
+                                                      (bit-shift-right bar 3))))
+                                         (conj args 13)))]
     (bit-xor foo (mod foo 7)
              (bit-shift-right foo 1))))
 

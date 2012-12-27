@@ -2,10 +2,10 @@
   (:gen-class)
   (:use [seesaw core]
         [clojure.java io]
-        [jardingaard util shared])
+        [jardingaard util shared reducers])
   (:import [java.net Socket]
            [java.util Date]
-           [java.io OutputStreamWriter InputStreamReader]
+           [java.io OutputStreamWriter InputStreamReader BufferedWriter BufferedReader]
            [java.nio FloatBuffer]
            [java.awt Color Dimension Graphics2D RenderingHints Transparency Image Frame Font]
            [java.awt.image BufferedImage]
@@ -60,7 +60,7 @@
 
 (def hello (ref nil))
 
-(def txtr)
+(declare txtr ^TextRenderer rnd)
 
 (def skew (ref nil))
 
@@ -97,22 +97,27 @@
         [b0 b1] trans]
     (.glViewport gl 0 0 a0 a1)
     (.glScalef gl (/ 2 a0) (/ -2 a1) 1)
-    (.glTranslatef gl b0 b1 0))
-  (.glEnable gl GL/GL_BLEND)
-  (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE_MINUS_SRC_ALPHA))
+    (.glTranslatef gl b0 b1 0)))
 
 (defn load-tex [^GL2 gl ^Texture tex]
   (.bind tex gl)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MIN_FILTER GL2/GL_NEAREST)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MAG_FILTER GL2/GL_NEAREST))
 
-(defn tile-groups [world pfoo [s0 s1]]
-  (group-by #(get-in world %)
+#_(defn tile-groups [world pfoo [s0 s1]]
+  (group-by #(get-in-map world %)
             (for [p0 (range (max 0 (- (first pfoo) s0))
                             (min (count world) (+ (first pfoo) s0)))
                   p1 (range (max 0 (- (second pfoo) s1))
                             (min (count world) (+ (second pfoo) s1)))]
               [p0 p1])))
+
+(defn tile-groups [world pfoo [s0 s1]]
+  (group-by #(get-in-map world %)
+            (product (rrange (max 0 (- (first pfoo) s0))
+                             (min (count world) (+ (first pfoo) s0)))
+                     (rrange (max 0 (- (second pfoo) s1))
+                             (min (count world) (+ (second pfoo) s1))))))
 
 (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer 0))
 (def ^FloatBuffer texc-buf (Buffers/newDirectFloatBuffer 0))
@@ -159,94 +164,92 @@
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
   (.glClearColor gl 0.5 0.5 0.5 1)
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
-  (let [rnd (TextRenderer. (Font. "SansSerif" Font/PLAIN 12))]
-    (if (and (get-in @state [1 :players @hello])
-             (< (- @fr-counter (first @state)) 40))
-      (let [{:keys [players bullets world c-sites world bunnies deadbunnies zombies]} (current-state)
-            pfoo (round (get-in players [@hello :p]))
-            offset (minus (mult size 0.5) (mult (get-in players [@hello :p]) tsz))]
-        (prepare-gl! gl offset size)
-        (set-color! gl 255 255 255)
+  (if (and (get-in @state [1 :players @hello])
+           (< (- @fr-counter (first @state)) 40))
+    (let [{:keys [players bullets world c-sites world bunnies deadbunnies zombies]} (current-state)
+          pfoo (round (get-in players [@hello :p]))
+          offset (minus (mult size 0.5) (mult (get-in players [@hello :p]) tsz))]
+      (prepare-gl! gl offset size)
+      (set-color! gl 255 255 255)
+      (.glEnable gl GL2/GL_TEXTURE_2D)
+      (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
+      (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
+      (let [foo (tile-groups world pfoo (plus [1 1] (round (div size (* tsz 2.0)))))]
+        (doseq [[bg tiles] foo
+                :let [tex (txtr bg)]
+                :when tex]
+          (draw-tiles! gl tex tiles))
+        (draw-tiles! gl (txtr :bunny) (map :p bunnies))
+        (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
+        (draw-tiles! gl (txtr :zombie) (map :p zombies))
+        (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
+        (.glDisable gl GL2/GL_TEXTURE_2D)
+        (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
+        (set-color! gl 0 0 0)
+        (fill-rects! gl (for [{:keys [p t]} c-sites]
+                          [(mult p tsz) [(inc (* t 0.3)) 5]]))
+        (set-color! gl 150 20 50)
+        (fill-rects! gl (for [[pid {:keys [p hp]}] players]
+                          [(minus (mult p tsz) [0 10]) [hp 5]]))
+        (set-color! gl 0 0 0)
+        (fill-rects! gl (for [{p :p} bullets]
+                          [(plus [12 12] (mult p tsz)) [5 5]]))
+        (.glColor4f gl 0.0 0.1 0.0 0.1)
+        (fill-rects! gl (for [p (:tree foo)]
+                          [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)])))
+      (let [{:keys [inventar inventar-p]} (players @hello)
+            ninventar (count inventar)
+            pb [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
+            pa (minus pb offset)]
+        (set-color! gl 20 40 10)
+        (fill-rects! gl [[pa [40 (* (count inventar) 40)]]])
+        (set-color! gl 40 80 20)
+        (fill-rects! gl [[(plus pa [0 (* inventar-p 40)]) [40 40]]])
         (.glEnable gl GL2/GL_TEXTURE_2D)
-        (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [foo (tile-groups world pfoo (plus [1 1] (round (div size (* tsz 2.0)))))]
-          (doseq [[bg tiles] foo
-                  :let [tex (txtr bg)]
-                  :when tex]
-            (draw-tiles! gl tex tiles))
-          (draw-tiles! gl (txtr :bunny) (map :p bunnies))
-          (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
-          (draw-tiles! gl (txtr :zombie) (map :p zombies))
-          (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
-          (.glDisable gl GL2/GL_TEXTURE_2D)
-          (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-          (set-color! gl 0 0 0)
-          (fill-rects! gl (for [{:keys [p t]} c-sites]
-                            [(mult p tsz) [(inc (* t 0.3)) 5]]))
-          (set-color! gl 150 20 50)
-          (fill-rects! gl (for [[pid {:keys [p hp]}] players]
-                            [(minus (mult p tsz) [0 10]) [hp 5]]))
-          (set-color! gl 0 0 0)
-          (fill-rects! gl (for [{p :p} bullets]
-                            [(plus [12 12] (mult p tsz)) [5 5]]))
-          (.glColor4f gl 0.0 0.1 0.0 0.1)
-          (fill-rects! gl (for [p (:tree foo)]
-                            [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)])))
-        (let [{:keys [inventar inventar-p]} (players @hello)
-              ninventar (count inventar)
-              pb [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
-              pa (minus pb offset)]
-          (set-color! gl 20 40 10)
-          (fill-rects! gl [[pa [40 (* (count inventar) 40)]]])
-          (set-color! gl 40 80 20)
-          (fill-rects! gl [[(plus pa [0 (* inventar-p 40)]) [40 40]]])
-          (.glEnable gl GL2/GL_TEXTURE_2D)
-          (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-          (set-color! gl 255 255 255)
-          (doseq [i (range ninventar)
-                  :let [tex (txtr (first (nth inventar i)))]
-                  :when tex]
-            (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [tsz tsz]]]))
-          (.glDisable gl GL2/GL_TEXTURE_2D)
-          (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-          (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
-          (.beginRendering rnd (first size) (second size))
-          (.setColor rnd 1 1 1 1)
-          (doseq [i (range ninventar)
-                  :let [n (second (nth inventar i))]
-                  :when (< 1 n)]
-            (draw-string! rnd (str n) (plus (plus pb [2 35]) [0 (* i 40)]) size))
-          (.setColor rnd 0 0 0 1)
-          (doseq [[pid {:keys [p inventar inventar-p died name]}] players]
-            (draw-string! rnd (str name " - " died)
-                          (plus offset (minus (mult p tsz) [0 20]))
-                          size)))
-        (.endRendering rnd)))
-    (.beginRendering rnd (first size) (second size))
-    (.setColor rnd 1 1 1 1)
-    (draw-string! rnd (if (< 2 (count @fr-ts))
-                        (str (if-not (= (first @fr-ts) (last @fr-ts))
-                               (int (/ 1000 (/ (- (first @fr-ts) (last @fr-ts))
-                                               (count @fr-ts))))
-                               "oo")
-                             (let [foo (map (fn [[a b]]
+        (set-color! gl 255 255 255)
+        (doseq [i (range ninventar)
+                :let [tex (txtr (first (nth inventar i)))]
+                :when tex]
+          (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [tsz tsz]]]))
+        (.glDisable gl GL2/GL_TEXTURE_2D)
+        (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
+        (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
+        (.beginRendering rnd (first size) (second size))
+        (.setColor rnd 1 1 1 1)
+        (doseq [i (range ninventar)
+                :let [n (second (nth inventar i))]
+                :when (< 1 n)]
+          (draw-string! rnd (str n) (plus (plus pb [2 35]) [0 (* i 40)]) size))
+        (.setColor rnd 0 0 0 1)
+        (doseq [[pid {:keys [p inventar inventar-p died name]}] players]
+          (draw-string! rnd (str name " - " died)
+                        (plus offset (minus (mult p tsz) [0 20]))
+                        size)))
+      (.endRendering rnd)))
+  (.beginRendering rnd (first size) (second size))
+  (.setColor rnd 1 1 1 1)
+  (draw-string! rnd (if (< 2 (count @fr-ts))
+                      (str (if-not (= (first @fr-ts) (last @fr-ts))
+                             (int (/ 1000 (/ (- (first @fr-ts) (last @fr-ts))
+                                             (count @fr-ts))))
+                             "oo")
+                           #_(let [foo (map (fn [[a b]]
                                               (Math/abs ^Integer (- a b)))
                                             (partition 2 1 @fr-ts))]
                                (str " " (apply min foo)
                                     " " (int (/ (apply + foo) (count foo)))
                                     " " (apply max foo)))
-                             " "
-                             @fr-counter
-                             " "
-                             (if @state
-                               (- @fr-counter (first @state))
-                               "..."))
-                        "---")
-                  [10 10]
-                  size)
-    (.endRendering rnd)
-    (.dispose rnd))
+                           " "
+                           @fr-counter
+                           " "
+                           (if @state
+                             (- @fr-counter (first @state))
+                             "..."))
+                      "---")
+                [10 10]
+                size)
+  (.endRendering rnd)
   (.glFlush gl))
 
 (defn connection-lost! []
@@ -256,7 +259,7 @@
 (defn msg [m]
   (send-off messenger (fn [a]
                         (try 
-                          (binding [*out* (OutputStreamWriter. (.getOutputStream conn))]
+                          (binding [*out* (BufferedWriter. (OutputStreamWriter. (.getOutputStream conn)))]
                             (prn m))
                           (catch java.net.SocketException e)))))
 
@@ -317,7 +320,7 @@
                             (msg (conj d (or @fr-counter (second d)))))))))
 
 (defn handle-msgs []
-  (let [r (LineNumberingPushbackReader. (InputStreamReader. (.getInputStream conn)))]
+  (let [r (LineNumberingPushbackReader. (BufferedReader. (InputStreamReader. (.getInputStream conn))))]
     (loop []
       (try
         (handle-msg (read r))
@@ -350,7 +353,11 @@
         class-loader (.getContextClassLoader (Thread/currentThread))]
     (.addGLEventListener can (proxy [GLEventListener] []
                                (init [d]
-                                 (load-textures! class-loader))
+                                 (load-textures! class-loader)
+                                 (def rnd (TextRenderer. (Font. "SansSerif" Font/PLAIN 12)))
+                                 (let [gl (.getGL2 (.getGL d))]
+                                   (.glEnable gl GL/GL_BLEND)
+                                   (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE_MINUS_SRC_ALPHA)))
                                (display [^GLAutoDrawable d]
                                  (let [gl (.getGL2 (.getGL d))]
                                    (render gl @size)))

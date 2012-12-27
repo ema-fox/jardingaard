@@ -1,8 +1,8 @@
 (ns jardingaard.shared
   (:use [jardingaard util]))
 
-(def num-zombies 0)
-(def num-bunnies 50)
+(def num-zombies 10)
+(def num-bunnies 100)
 
 (def step-fns [])
 
@@ -66,7 +66,7 @@
   (let [bla (gen-chunk [0 0] [world-size world-size]
                        [[:wall 6]
                         [:grass 20]
-                        [:tall-grass 40]
+                        [:tall-grass 400]
                         [:dirt 10]
                         [:tree 1]
                         [:shrub 2]])]
@@ -93,7 +93,7 @@
                goal)
         [d0 d1] (minus goal start)
         slope (/ d1 d0)
-        [^Number a ^Number b] (sort [(first start) (first goal)])
+        [a b] (sort [(first start) (first goal)])
         xline (concat [a]
                       (range (+ 0.5 (floor (+ 0.5 a)))
                              (+ 0.5 (floor (+ 0.5 b))))
@@ -177,13 +177,23 @@
                                       [0 0])])
                            directions)))
 
+(defn get-in-map [w [^Integer p0 ^Integer p1]]
+  (get (get w p0) p1))
+
+(def fdstore (into {} (mapmap (fn [_ xs]
+                                (eval `(fn [[^Integer ~'p0 ^Integer ~'p1] ~'w]
+                                         (and ~@(for [[x0 x1] xs]
+                                                  `(walkable? (get (get ~'w (+ ~x0 ~'p0)) (+ ~x1 ~'p1))))))))
+                              tdstore)))
+
 (defn test-direction [p d w]
-  (every? #(walkable? (get-in w (plus p %))) (tdstore d)))
+  ((fdstore d) p w))
+;  (every? #(walkable? (get-in-map w (plus p %))) (tdstore d)))
 
 (defn route [start goal walk-speeds w]
   {:pre [(every? integer? start)
          (every? integer? goal)]}
-  (loop [open {start (path-stub. (list start)
+  (loop [open {start (path-stub. ()
                                  0
                                  (manhatten start goal))}
          other-open {goal (path-stub. (list goal)
@@ -202,23 +212,29 @@
             (concat (reverse (:ps other-side)) (rest ps))
             (concat (reverse ps) (rest (:ps other-side))))
           (recur other-open
-                 (merge-with (fn b [a b]
-                               (if (< (+ (:d a) (:h a))
-                                      (+ (:d b) (:h b)))
-                                 a
-                                 b))
-                             (dissoc open endp)
-                             (into {} (for [p (->> directions
-                                                   (filter #(and (not (closed (plus endp %)))
-                                                                 (< (manhatten (plus endp %) goal) 30)
-                                                                 (test-direction endp % w)))
-                                                   (map #(plus endp %)))]
-                                        [p (path-stub. (conj ps p)
-                                                       (+ d (distance endp p))
-                                                       ;(+ d (walk-speeds (get-in w p)))
-                                                       (distance p (if swapped
-                                                                     start
-                                                                     goal)))])))
+                 (persistent! (loop [m (dissoc! (transient open) endp)
+                                     [p & newps] (->> directions
+                                                      (keep (fn c [%]
+                                                              (let [p (plus endp %)]
+                                                                (if (and (not (closed p))
+                                                                         (< (manhatten p goal) 30)
+                                                                         (test-direction endp % w))
+                                                                  p)))))]
+                                (if p
+                                  (let [d (distance endp p)
+                                        h (distance p (if swapped
+                                                        start
+                                                        goal))
+                                        a (m p)]
+                                    (recur (if (and a
+                                                    (< (+ (:d a) (:h a))
+                                                       (+ d h)))
+                                             m
+                                             (assoc! m p (path-stub. (conj ps p)
+                                                                     d
+                                                                     h)))
+                                           newps))
+                                  m)))
                  (not swapped)
                  (conj closed endp))))
       nil)))
@@ -240,7 +256,7 @@
 (defstep [zombies players spawn-point world]
   (assoc state
     :zombies (mapv (fn [{:keys [p path seed cooldown] :as zombie}]
-                     (assoc (if (and path
+                     (assoc (if (and (seq path)
                                      (< 0.1 (distance (last path) p)))
                               (new-pos zombie zombie-walk-speeds world)
                               (if-let [goal (and (= 0 (mod (prng *seed* seed (round p)) 9))
@@ -292,7 +308,7 @@
                     (cond (and (first path)
                                (< 0.1 (distance (last path) p)))
                           (new-pos bunny human-walk-speeds world)
-                          (= 0 (mod (prng *seed* seed (round p)) 9))
+                          (= 0 (mod (prng *seed* seed (round p)) 99))
                           (let [foo0 (mod (prng *seed* seed 4321 (round p)) 11)
                                 foo1 (mod (prng *seed* seed 1234 (round p)) 11)
                                 goal (round (plus p (minus [foo0 foo1] [5 5])))]
@@ -302,13 +318,14 @@
                           true
                           bunny))
                   (if (and (< (count bunnies) num-bunnies)
-                           (= 0 (mod (prng *seed* 565) 99)))
+                           (= 0 (mod (prng *seed* 565) 9)))
                     (conj bunnies {:p spawn-point
                                    :seed *seed*})
                     bunnies))]
     (let [[nworld nbs2]
           (ttmap (fn [world {:keys [p path] :as bunny}]
-                   (if (and (first path)
+                   (if (and false
+                            (first path)
                             (< (distance (last path) p) 0.1)
                             (= :tall-grass (get-in world (round p))))
                      [(assoc-in world (round p) :grass)
@@ -393,12 +410,10 @@
                   first)]
     (if goal
       (let [pp (get-in players [pid :p])
-            path (smooth-path pp
-                              (route (round pp)
-                                     (round goal)
-                                     human-walk-speeds
-                                     world)
-                              world)]
+            path (route (round pp)
+                        (round goal)
+                        human-walk-speeds
+                        world)]
         (assoc-in state [:players pid :path] path))
       state)))
 

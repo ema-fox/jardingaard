@@ -3,7 +3,7 @@
         clojure.java.io)
   (:import [java.net ServerSocket Socket]
            [java.util Date]
-           [java.io OutputStreamWriter InputStreamReader]
+           [java.io OutputStreamWriter InputStreamReader BufferedWriter BufferedReader]
            [clojure.lang LineNumberingPushbackReader]))
 
 (set! *warn-on-reflection* true)
@@ -53,7 +53,7 @@
 (defn send-client [conn msg]
   (send conn (fn [^Socket sock]
                (try
-                 (binding [*out* (OutputStreamWriter. (.getOutputStream sock))]
+                 (binding [*out* (BufferedWriter. (OutputStreamWriter. (.getOutputStream sock)))]
                    (prn msg))
                  (catch java.net.SocketException e
                    (purge-conn conn)))
@@ -110,8 +110,7 @@
                                        [p0 p1])))))
   (ref-set messages (into {} (filter #(<= (first @world-state)
                                           (first %))
-                                     @messages)))
-  (update-clients))
+                                     @messages))))
 
 (defn steps []
   (loop []
@@ -146,8 +145,10 @@
                :died 0
                :hp 20}]))))
 
+(def foo (atom 0))
+
 (defn listen [conn]
-  (let [r (LineNumberingPushbackReader. (InputStreamReader. (.getInputStream ^Socket @conn)))
+  (let [r (LineNumberingPushbackReader. (BufferedReader. (InputStreamReader. (.getInputStream ^Socket @conn))))
         eof (Object.)
         pid (@conns conn)]
     (loop []
@@ -179,7 +180,10 @@
                      (when (< (first @world-state) (apply min (vals @latest-player-message)))
                        (step!)
                        (recur)))
-                   (update-messages!)))
+                  ; (when (or false (= 0 (mod @foo 10)))
+                     (update-clients)
+                     (update-messages!);)
+                   (swap! foo inc)))
                true)))
         (recur)))))
 
