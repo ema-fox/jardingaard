@@ -1,5 +1,7 @@
 (ns jardingaard.util
-  (:use [clojure.set :only [union]]))
+  (:use [clojure.set :only [union]]
+        [clojure.core.reducers :only [cat]]
+        jardingaard.reducers))
 
 (def tau (* 2 Math/PI))
 
@@ -128,33 +130,37 @@
 (defn forkIO [f] (.start (Thread. f))) ; cool bilingual joke or just tacky? 
 
 (defn ^Integer prng [& args]
-  (let [^Integer foo (apply bit-xor (map (fn [x]
-                                           (let [^Integer bar (if (sequential? x)
-                                                                (apply prng x)
-                                                                x)]
-                                             (bit-xor bar
-                                                      (bit-shift-left bar (mod bar 2))
-                                                      (bit-shift-left bar (mod bar 3))
-                                                      (bit-shift-right bar 3))))
-                                         (conj args 13)))]
-    (bit-xor foo (mod foo 7)
+  (let [^Integer foo (reduce (fn [res x]
+                               (let [^Integer bar (if (sequential? x)
+                                                    (apply prng x)
+                                                    x)]
+                                 (bit-xor res
+                                          bar
+                                          (bit-shift-left bar (rem bar 2))
+                                          (bit-shift-left bar (rem bar 3))
+                                          (bit-shift-right bar 3))))
+                             13
+                             args)]
+    (bit-xor foo (rem foo 7)
              (bit-shift-right foo 1))))
 
 (declare gen-patch)
 
 (defn gen-map-patch [a b]
-  (reduce (fn [res k]
-            (if (not= (a k) (b k))
-              (assoc res k (gen-patch (a k) (b k)))
-              res))
-          {}
-          (union (set (keys a)) (keys b))))
+  (persistent! (reduce (fn [res k]
+                         (if (= (a k) (b k))
+                           res
+                           (assoc! res k (gen-patch (a k) (b k)))))
+                       (transient {})
+                       (cat (keys a) (keys b)))))
 
 (defn gen-vec-patch [a b]
-  (into {} (keep (fn [k]
-                   (if (not= (a k) (b k))
-                     [k (gen-patch (a k) (b k))]))
-                 (range (count a)))))
+  (persistent! (reduce (fn [res k]
+                         (if (= (a k) (b k))
+                           res
+                           (assoc! res k (gen-patch (a k) (b k)))))
+                       (transient {})
+                       (rrange 0 (count a)))))
 
 (defn gen-patch [a b]
   (cond (and (map? a)
@@ -177,3 +183,42 @@
                     (assoc b k (apply-patch (a k) v))))
                 a
                 p)))
+
+(declare pr-summary)
+
+(defn pr-summary-seq [[y & ys] n]
+  (if y
+    (if (< 0 n)
+      (recur ys (+ (/ n 2) (let [m (pr-summary y (/ n 2))]
+                             (if (first ys)
+                               (do (print " ")
+                                   (dec m))
+                               m))))
+      (let [sn (str (inc (count ys)))]
+        (print "..." sn "more")
+          (- n 9 (count sn))))
+    n))
+
+(defn pr-summary-coll [x n start end]
+  (print start)
+  (let [n (pr-summary-seq x n)]
+    (print end)
+    (- n (count start) (count end))))
+
+(defn pr-summary
+  ([x]
+     (pr-summary x 5000)
+     (prn))
+  ([x n]
+     (cond (vector? x)
+           (pr-summary-coll x n "[" "]")
+           (map? x)
+           (pr-summary-coll (apply concat x) n "{" "}")
+           (set? x)
+           (pr-summary-coll (seq x) n "#{" "}")
+           (seq? x)
+           (pr-summary-coll x n "(" ")")
+           true
+           (let [out (str x)]
+             (print out)
+             (- n (count out))))))

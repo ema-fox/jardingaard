@@ -22,8 +22,6 @@
 
 (def tsz 32)
 
-(def tick-duration 33)
-
 (defn add-rect! [^FloatBuffer buf [p0 p1] [s0 s1]]
   (doseq [n [p0 p1
              p0 (+ p1 s1)
@@ -58,6 +56,8 @@
 
 (def cl-messages (ref {}))
 
+(def build-index (ref nil))
+
 (def hello (ref nil))
 
 (declare txtr ^TextRenderer rnd)
@@ -70,9 +70,9 @@
   (Thread/sleep (let [t (+ tick-duration
                            (condp = @skew
                              :plus
-                             -10
+                             -20
                              :minus
-                             10
+                             20
                              0))]
                   (dosync (ref-set skew nil))
                   t))
@@ -115,9 +115,9 @@
 (defn tile-groups [world pfoo [s0 s1]]
   (group-by #(get-in-map world %)
             (product (rrange (max 0 (- (first pfoo) s0))
-                             (min (count world) (+ (first pfoo) s0)))
+                             (+ (first pfoo) s0))
                      (rrange (max 0 (- (second pfoo) s1))
-                             (min (count world) (+ (second pfoo) s1))))))
+                             (+ (second pfoo) s1)))))
 
 (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer 0))
 (def ^FloatBuffer texc-buf (Buffers/newDirectFloatBuffer 0))
@@ -159,6 +159,14 @@
         (.glVertexPointer gl 2 GL2/GL_FLOAT 0 vert-buf)
         (.glDrawArrays gl GL2/GL_QUADS 0 nverts)))))
 
+(defn possible-recipes []
+  (keep (fn [[x r]]
+          (if (every? (fn [[y n]]
+                        (player-has? (get-in @state [1 :players @hello]) y n))
+                      r)
+            x))
+        recipes))
+
 (defn render [^GL2 gl size]
   (dosync
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
@@ -183,6 +191,10 @@
         (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
         (draw-tiles! gl (txtr :zombie) (map :p zombies))
         (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
+        (.glColor4f gl 1.0 1.0 1.0 0.2)
+        (draw-rects! gl (txtr :tree-crown)
+                     (for [p (:tree foo)]
+                       [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)]))
         (.glDisable gl GL2/GL_TEXTURE_2D)
         (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
         (set-color! gl 0 0 0)
@@ -193,18 +205,20 @@
                           [(minus (mult p tsz) [0 10]) [hp 5]]))
         (set-color! gl 0 0 0)
         (fill-rects! gl (for [{p :p} bullets]
-                          [(plus [12 12] (mult p tsz)) [5 5]]))
-        (.glColor4f gl 0.0 0.1 0.0 0.1)
-        (fill-rects! gl (for [p (:tree foo)]
-                          [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)])))
+                          [(plus [12 12] (mult p tsz)) [5 5]])))
       (let [{:keys [inventar inventar-p]} (players @hello)
             ninventar (count inventar)
             pb [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
-            pa (minus pb offset)]
+            pa (minus pb offset)
+            bs (possible-recipes)]
         (set-color! gl 20 40 10)
-        (fill-rects! gl [[pa [40 (* (count inventar) 40)]]])
+        (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
+                              (if @build-index
+                                [[(minus pa [40 0]) [40 (* (count bs) 40)]]])))
         (set-color! gl 40 80 20)
         (fill-rects! gl [[(plus pa [0 (* inventar-p 40)]) [40 40]]])
+        (if @build-index
+          (fill-rects! gl [[(plus pa [-40 (* @build-index 40)]) [40 40]]]))
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
         (set-color! gl 255 255 255)
@@ -212,6 +226,13 @@
                 :let [tex (txtr (first (nth inventar i)))]
                 :when tex]
           (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [tsz tsz]]]))
+        (if @build-index
+          (doseq [i (range (count bs))
+                  :let [cs (nth bs i)]
+                  j (range (count cs))
+                  :let [tex (txtr (nth cs j))]
+                  :when tex]
+            (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [(* j -40) (* i 40)]) [tsz tsz]]])))
         (.glDisable gl GL2/GL_TEXTURE_2D)
         (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
         (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
@@ -223,7 +244,7 @@
           (draw-string! rnd (str n) (plus (plus pb [2 35]) [0 (* i 40)]) size))
         (.setColor rnd 0 0 0 1)
         (doseq [[pid {:keys [p inventar inventar-p died name]}] players]
-          (draw-string! rnd (str name " - " died)
+          (draw-string! rnd (str name " - " died " - " (round p))
                         (plus offset (minus (mult p tsz) [0 20]))
                         size)))
       (.endRendering rnd)))
@@ -272,12 +293,25 @@
 
 (defn key-pressed [e]
   (condp = (.getKeyCode e)
-    KeyEvent/VK_E (add-msg [:enhance])
-    KeyEvent/VK_A (add-msg [:incip])
-    KeyEvent/VK_Q (add-msg [:decip])
+    KeyEvent/VK_A (if @build-index
+                    (dosync (alter build-index #(let [n (count (possible-recipes))]
+                                                  (if (= n 0)
+                                                    nil
+                                                    (mod (inc %) n)))))
+                    (add-msg [:incip]))
+    KeyEvent/VK_Q (if @build-index
+                    (dosync (alter build-index #(let [n (count (possible-recipes))]
+                                                  (if (= n 0)
+                                                    nil
+                                                    (mod (dec %) (count (possible-recipes)))))))
+                    (add-msg [:decip]))
+    KeyEvent/VK_TAB (dosync (alter build-index #(if % nil 0)))
+    KeyEvent/VK_SPACE (add-msg [:build (nth (possible-recipes) @build-index)])
     KeyEvent/VK_0 (msg [:save])
     KeyEvent/VK_ESCAPE (System/exit 0)
-    KeyEvent/VK_S (prn (assoc-in @state [1 :world] nil) (sort @srv-messages) @fr-counter)
+    KeyEvent/VK_S (do (pr-summary @state)
+                      (pr-summary (sort @srv-messages))
+                      (pr-summary @fr-counter))
     nil))
 
 (def size (ref [0 0]))
@@ -302,7 +336,7 @@
                              (TextureIO/newTexture (resource (str name ".png") class-loader)
                                                    false "png")])
                           ['grass 'tall-grass 'dirt 'shrub 'door 'wall 'windowed-wall 'tree
-                           'twig 'gun 'pickaxe
+                           'twig 'gun 'pickaxe 'tree-crown 'water 'sand 'steak 'thread 'fur
                            'bunny 'deadbunny 'zombie 'player 'trunk]))))
 
 (defn handle-msg [d]
@@ -351,6 +385,7 @@
              (.add can))
         drawer (loud-agent nil)
         class-loader (.getContextClassLoader (Thread/currentThread))]
+    (.setFocusTraversalKeysEnabled can false)
     (.addGLEventListener can (proxy [GLEventListener] []
                                (init [d]
                                  (load-textures! class-loader)

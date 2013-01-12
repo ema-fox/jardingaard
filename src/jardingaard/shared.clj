@@ -1,8 +1,13 @@
 (ns jardingaard.shared
-  (:use [jardingaard util]))
+  (:use [jardingaard util reducers]
+        [clojure.set :only [intersection]]))
 
-(def num-zombies 10)
-(def num-bunnies 100)
+(def world-size (* 32 10))
+
+(def num-zombies 0)
+(def num-bunnies 2)
+
+(def tick-duration 33)
 
 (def step-fns [])
 
@@ -26,9 +31,11 @@
 (def ^:dynamic *seed*)
 
 (def human-walk-speeds {:dirt 1
-                  :door 1
-                  :grass 1.1
-                  :tall-grass 1.3})
+                        :door 1
+                        :grass 1.1
+                        :water 1.7
+                        :sand 1.3
+                        :tall-grass 1.3})
 
 (def walkable? (set (keys human-walk-speeds)))
 
@@ -38,54 +45,26 @@
                                              (* 4 v))])
                                       human-walk-speeds)))
 
-(defn pick [xs]
-  (let [foo (apply + (map second xs))
-        bar (rand foo)]
-    (loop [yar bar
-           ys xs]
-      (if (< yar (second (first ys)))
-        (ffirst ys)
-        (recur (- yar (second (first ys)))
-               (rest ys))))))
+(def low-mask 31)
 
-(defn gen-chunk [[p0 p1 :as p] [s0 s1 :as s] bla]
-  (if (= 0 (apply * (map dec s)))
-    (into {} (for [b0 (range s0)
-                     b1 (range s1)]
-               [(plus p [b0 b1]) (pick bla)]))
-    (let [nbla (map (fn [[x y]]
-                      [x (* y (+ (rand)))])
-                    bla)
-          [d0 d1 :as d] (map #(int (/ % 2)) s)]
-      (merge (gen-chunk p d nbla)
-             (gen-chunk [(+ p0 d0) p1] [(- s0 d0) d1] nbla)
-             (gen-chunk [p0 (+ p1 d1)] [s0 (- s1 d1)] nbla)
-             (gen-chunk (plus p d) (minus s d) nbla)))))
+(def high-mask (bit-not low-mask))
 
-(defn gen-world [world-size]
-  (let [bla (gen-chunk [0 0] [world-size world-size]
-                       [[:wall 6]
-                        [:grass 20]
-                        [:tall-grass 400]
-                        [:dirt 10]
-                        [:tree 1]
-                        [:shrub 2]])]
-    (mapv (fn [p0]
-            (mapv (fn [p1]
-                    (bla [p0 p1]))
-                  (range world-size)))
-          (range world-size))))
+(defn assoc-in-map [m [p0 p1] v]
+  (let [p0a (bit-and p0 high-mask)
+        p0b (bit-and p0 low-mask)
+        p1a (bit-and p1 high-mask)
+        p1b (bit-and p1 low-mask)]
+    (if-let [mchunk (m [p0a p1a])]
+      (let [line (mchunk p0b)]
+        (assoc m [p0a p1a] (assoc mchunk p0b (assoc line p1b v))))
+      m)))
 
-(defn new-world [world-size bullet-speed]
-  {:players {}
-   :bullets []
-   :c-sites []
-   :zombies []
-   :bunnies []
-   :deadbunnies []
-   :world (gen-world world-size)
-   :bullet-speed bullet-speed
-   :spawn-point [(/ world-size 2) (/ world-size 2)]})
+(defn get-in-map [m [p0 p1]]
+  (let [p0a (bit-and p0 high-mask)
+        p0b (bit-and p0 low-mask)
+        p1a (bit-and p1 high-mask)
+        p1b (bit-and p1 low-mask)]
+    (get (get (get m [p0a p1a]) p0b) p1b)))
 
 (defn line-affects [start goal]
   (let [goal (if (== (first goal) (first start))
@@ -116,9 +95,9 @@
                            (assoc b
                              :p newp
                              :ttl (if (some #((if (> ttl 497)
-                                                #{:wall :door :tree}
-                                                #{:wall :door :tree :windowed-wall})
-                                              (get-in world %))
+                                                #{:wall :door :tree :sand :water}
+                                                #{:wall :door :tree :sand :water :windowed-wall})
+                                              (get-in-map world %))
                                             (line-affects p newp))
                                     0
                                     (dec ttl))))))
@@ -133,7 +112,7 @@
              (assoc entity
                :p (plus p (mult (direction p (first npath))
                                 (min (/ 0.25
-                                        (or (walk-speeds (get-in world
+                                        (or (walk-speeds (get-in-map world
                                                                  (round p)))
                                             1))
                                      (distance p (first npath))))))
@@ -145,7 +124,7 @@
      (Math/abs (int (- a1 b1)))))
 
 (defn ngbrs [p w]
-  (filter #(get-in w %) (map #(plus p %)
+  (filter #(get-in-map w %) (map #(plus p %)
                              [[0 1]
                               [0 -1]
                               [1 0]
@@ -153,7 +132,7 @@
 
 (defn far-ngbrs [[p0 p1 :as p] d w]
   (filter #(and (not= p%)
-                (get-in w %))
+                (get-in-map w %))
           (for [a0 (range (- p0 d) (+ 1 p0 d))
                 a1 (range (- p1 d) (+ 1 p1 d))]
             [a0 a1])))
@@ -177,13 +156,11 @@
                                       [0 0])])
                            directions)))
 
-(defn get-in-map [w [^Integer p0 ^Integer p1]]
-  (get (get w p0) p1))
-
 (def fdstore (into {} (mapmap (fn [_ xs]
                                 (eval `(fn [[^Integer ~'p0 ^Integer ~'p1] ~'w]
                                          (and ~@(for [[x0 x1] xs]
-                                                  `(walkable? (get (get ~'w (+ ~x0 ~'p0)) (+ ~x1 ~'p1))))))))
+                                                  `(walkable? (get-in-map ~'w [(+ ~x0 ~'p0)
+                                                                               (+ ~x1 ~'p1)])))))))
                               tdstore)))
 
 (defn test-direction [p d w]
@@ -207,10 +184,17 @@
                                                 a
                                                 b))
                                             open)]
-        (if-let [other-side (other-open endp)]
-          (if swapped
-            (concat (reverse (:ps other-side)) (rest ps))
-            (concat (reverse ps) (rest (:ps other-side))))
+        (if (other-open endp)
+          (let [cp (reduce (fn [a b]
+                             (if (< (+ (:d (open a)) (:d (other-open a)))
+                                    (+ (:d (open b)) (:d (other-open b))))
+                               a
+                               b))
+                           (intersection (set (keys open)) (set (keys other-open))))
+                other-side (other-open cp)]
+            (if swapped
+              (concat (reverse (:ps other-side)) (rest ps))
+              (concat (reverse ps) (rest (:ps other-side)))))
           (recur other-open
                  (persistent! (loop [m (dissoc! (transient open) endp)
                                      [p & newps] (->> directions
@@ -221,7 +205,7 @@
                                                                          (test-direction endp % w))
                                                                   p)))))]
                                 (if p
-                                  (let [d (distance endp p)
+                                  (let [d (+ (distance endp p) d)
                                         h (distance p (if swapped
                                                         start
                                                         goal))
@@ -304,65 +288,67 @@
       :players (into {} pls))))
 
 (defstep [bunnies spawn-point world]
-  (let [nbs (mapv (fn [{:keys [p path seed] :as bunny}]
-                    (cond (and (first path)
-                               (< 0.1 (distance (last path) p)))
-                          (new-pos bunny human-walk-speeds world)
-                          (= 0 (mod (prng *seed* seed (round p)) 99))
-                          (let [foo0 (mod (prng *seed* seed 4321 (round p)) 11)
-                                foo1 (mod (prng *seed* seed 1234 (round p)) 11)
-                                goal (round (plus p (minus [foo0 foo1] [5 5])))]
-                            (assoc bunny
-                              :path (if (= :tall-grass (get-in world goal))
-                                      (route (round p) goal human-walk-speeds world))))
-                          true
-                          bunny))
-                  (if (and (< (count bunnies) num-bunnies)
-                           (= 0 (mod (prng *seed* 565) 9)))
-                    (conj bunnies {:p spawn-point
-                                   :seed *seed*})
-                    bunnies))]
+  (let [nbs (map (fn [{:keys [p path seed energy] :as bunny}]
+                   (assoc (cond (< energy 1)
+                                (assoc bunny :dead true)
+                                (and (first path)
+                                     (< 0.1 (distance (last path) p)))
+                                (new-pos bunny human-walk-speeds world)
+                                (= 0 (mod (prng *seed* seed (round p)) 99))
+                                (let [foo0 (mod (prng *seed* seed 4321 (round p)) 11)
+                                      foo1 (mod (prng *seed* seed 1234 (round p)) 11)
+                                      goal (round (plus p (minus [foo0 foo1] [5 5])))]
+                                  (assoc bunny
+                                    :path (if (= :tall-grass (get-in-map world goal))
+                                            (route (round p) goal human-walk-speeds world))))
+                                true
+                                bunny)
+                     :energy (dec energy)))
+                 (if (and (< (count bunnies) num-bunnies)
+                          (= 0 (mod (prng *seed* 565) 9)))
+                   (conj bunnies {:p spawn-point
+                                  :energy 500
+                                  :seed *seed*})
+                   bunnies))]
     (let [[nworld nbs2]
           (ttmap (fn [world {:keys [p path] :as bunny}]
-                   (if (and false
-                            (first path)
+                   (if (and (first path)
                             (< (distance (last path) p) 0.1)
-                            (= :tall-grass (get-in world (round p))))
-                     [(assoc-in world (round p) :grass)
-                      bunny]
+                            (= :tall-grass (get-in-map world (round p))))
+                     [(assoc-in-map world (round p) :grass)
+                      (update-in bunny [:energy] (partial + 300))]
                      [world bunny]))
                  world
-                 nbs)]
+                 nbs)
+          nbs3 (mapcat (fn [{:keys [energy seed] :as bunny}]
+                         (if (< energy 5000)
+                           [bunny]
+                           [(assoc bunny :energy 2500)
+                            (assoc bunny :energy 2500 :seed (+ *seed* seed))]))
+                       nbs2)]
       (assoc state
         :world nworld
-        :bunnies nbs2))))
+        :bunnies (vec nbs3)))))
+
+(defn process-bullets [{:keys [bullets bullet-speed] :as state} key]
+  (step-bullets&entities (fn [entity damage]
+                           (if (< 0 damage)
+                             (assoc entity
+                               :dead true)
+                             entity))
+                         :p
+                         bullet-speed
+                         bullets
+                         (state key)))
 
 (defstep [bullets bullet-speed zombies]
-  (let [[bus zmbs] (step-bullets&entities
-                    (fn [zombie damage]
-                      (if (< 0 damage)
-                        (assoc zombie
-                          :dead true) ;<-- lol
-                        zombie))
-                    :p
-                    bullet-speed
-                    bullets
-                    zombies)]
+  (let [[bus zmbs] (process-bullets state :zombies)]
     (assoc state
       :bullets bus
       :zombies (vec (filter #(not (:dead %)) zmbs)))))
 
 (defstep [bullets deadbunnies bunnies bullet-speed]
-  (let [[bus bns] (step-bullets&entities
-                   (fn [bunny damage]
-                     (if (< 0 damage)
-                       (assoc bunny
-                         :dead true)
-                       bunny))
-                   :p
-                   bullet-speed
-                   bullets
-                   bunnies)]
+  (let [[bus bns] (process-bullets state :bunnies)]
     (let [{ls nil ds true} (group-by :dead
                                      bns)]
       (assoc state
@@ -394,11 +380,11 @@
                      (let [tilep (round (:p pl))
                            succ ({:tall-grass :grass
                                   :grass :dirt}
-                                 (get-in w tilep))]
+                                 (get-in-map w tilep))]
                        (if (and succ
                                 (= 0 (mod (apply bit-xor *seed* tilep)
                                           9)))
-                         (assoc-in w tilep succ)
+                         (assoc-in-map w tilep succ)
                          w)))
                    world
                    (vals players))))
@@ -406,7 +392,7 @@
 (defn walk [{:keys [world players] :as state} pid p]
   (let [goal (->> (line-affects (get-in players [pid :p]) p)
                   (sort-by #(distance % p))
-                  (drop-while #(not (walkable? (get-in world %))))
+                  (drop-while #(not (walkable? (get-in-map world %))))
                   first)]
     (if goal
       (let [pp (get-in players [pid :p])
@@ -439,11 +425,11 @@
                                               :ttl 500
                                               :m m}))
           (and (= :pickaxe selected)
-               (#{:wall :shrub :windowed-wall :door :tree} (get-in (:world state) tilep))
+               (#{:wall :shrub :windowed-wall :door :tree} (get-in-map (:world state) tilep))
                (not (some #(= tilep (:p %)) (:c-sites state))))
           (assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
           (and (#{:wall :windowed-wall :door} selected)
-               (#{:grass :dirt :tall-grass} (get-in (:world state) tilep))
+               (#{:grass :dirt :tall-grass} (get-in-map (:world state) tilep))
                (not (some #(= tilep (:p %)) (:c-sites state))))
           (assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
           true
@@ -483,13 +469,14 @@
                             (< (distance p do-at) 5)
                             (not (some #(= do-at (:p %)) cs)))
                      (cond (and (= :pickaxe selected)
-                                (#{:wall :shrub :windowed-wall :door :tree} (get-in world do-at)))
+                                (#{:wall :shrub :windowed-wall :door :tree}
+                                 (get-in-map world do-at)))
                            [(conj cs {:p do-at :t 0 :owner pid})
                             [pid (assoc player
                                    :do-at nil
                                    :path nil)]]
                            (and (#{:wall :windowed-wall :door} selected)
-                                (#{:grass :dirt :tall-grass} (get-in (:world state) do-at)))
+                                (#{:grass :dirt :tall-grass} (get-in-map world do-at)))
                            [(conj cs {:p do-at :t 0 :x selected})
                             [pid (assoc (steal-player player selected 1)
                                    :do-at nil
@@ -505,77 +492,69 @@
 
 (defn decip [{:keys [inventar inventar-p] :as player}]
   (assoc player
-    :inventar-p (if (= 0 inventar-p)
-                  (dec (count inventar))
-                  (dec inventar-p))))
+    :inventar-p (mod (dec inventar-p) (count inventar))))
 
 (defn incip [{:keys [inventar inventar-p] :as player}]
   (assoc player
-    :inventar-p (if (= (dec (count inventar)) inventar-p)
-                  0
-                  (inc inventar-p))))
+    :inventar-p (mod (inc inventar-p) (count inventar))))
 
 (defn player-has? [{:keys [inventar]} x n]
   (some #(and (= (first %) x) (<= n (second %)))
         inventar))
 
-(defn enhance [{:keys [inventar inventar-p] :as player}]
-  (let [x (nth inventar inventar-p)]
-    (condp = (first x)
-      :wall (if (player-has? player :twig 5)
-              (-> player
-                  (give-player :windowed-wall 1)
-                  (steal-player :wall 1)
-                  (steal-player :twig 5))
-              player)
-      :twig (if (player-has? player :twig 13)
-              (-> player
-                  (give-player :door 1)
-                  (steal-player :twig 13))
-              player)
-      player)))
+(def recipes {[:windowed-wall] {:wall 1
+                                :twig 5}
+              [:door] {:twig 13}
+              [:fur :steak :thread] {:bunny 1}
+              [:gun] {:twig 3
+                      :thread 2}})
+
+(defn build [player xs]
+  (if-let [r (recipes xs)]
+    (if (every? (fn [[y n]]
+                  (player-has? player y n))
+                r)
+      (reduce (fn [pl [y n]]
+                (steal-player pl y n))
+              (reduce (fn [pl x]
+                        (give-player pl x 1))
+                      player
+                      xs)
+              r)
+      player)
+    player))
 
 (defn step-tile [p w]
-  (let [tile (get-in w p)
-        ns (frequencies (map #(get-in w %)
+  (let [tile (get-in-map w p)
+        ns (frequencies (map #(get-in-map w %)
                              (ngbrs p w)))]
-    (condp = tile
-      :dirt (cond (:tree ns)
-                  [nil tile]
-                  (or (:grass ns) (:tall-grass ns) (:shrub ns))
-                  [(rand-int 99999)
-                   :grass]
-                  true
-                  [nil
-                   tile])
-      :grass (cond (:tree ns)
-                   [(rand-int 999) :dirt]
-                   true
-                   [(rand-int 99999) :tall-grass])
-      :tall-grass (cond (:tree ns)
-                        [(rand-int 999) :dirt]
-                        (:shrub ns)
-                        [(rand-int 99999)
-                         :shrub]
-                        true
-                        [nil
-                         tile])
-      :shrub (cond (:tree ns)
-                   [(rand-int 999) :dirt]
-                   (and (:shrub ns)
-                        (< 3 (:shrub ns))
-                        (not= 0 (mod (prng p) 3)))
-                   [(rand-int 99)
-                    :dirt]
-                   true
-                   [nil
-                    tile])
-      :tree (cond (:tree ns)
-                  [(rand-int 999) :dirt]
-                  true
-                  [nil tile])
-      [nil
-       tile])))
+    (or (condp = tile
+          :dirt (cond (:tree ns)
+                      [nil tile]
+                      (or (:grass ns) (:tall-grass ns) (:shrub ns))
+                      [(rand-int 99999)
+                       :grass])
+          :grass (cond (:tree ns)
+                       [(rand-int 999) :dirt]
+                       true
+                       [(rand-int 99999) :tall-grass])
+          :tall-grass (cond (:tree ns)
+                            [(rand-int 999) :dirt]
+                            (:shrub ns)
+                            [(rand-int 99999)
+                             :shrub])
+          :shrub (cond (:tree ns)
+                       [(rand-int 999) :dirt]
+                       (and (:shrub ns)
+                            (< 3 (:shrub ns))
+                            (not= 0 (mod (prng p) 3)))
+                       [(rand-int 99)
+                        :dirt])
+          :tree (cond (:tree ns)
+                      [(rand-int 999) :dirt])
+          nil)
+        [nil
+         tile])))
 
 (defn exec-message [state msg]
   {:pre [(:world state)]
@@ -588,17 +567,18 @@
                :shot (shot state pid (second cmd))
                :decip (update-in state [:players pid] decip)
                :incip (update-in state [:players pid] incip)
-               :enhance (update-in state [:players pid] enhance)))
-    :tile (assoc-in state (cons :world (second msg))
-                    (second (step-tile (second msg) (:world state))))
+               :build (update-in state [:players pid] build (second cmd))))
+    :tile (update-in state [:world]
+                     #(assoc-in-map % (second msg)
+                                    (second (step-tile (second msg) %))))
     :sapling (let [[_ sapp treep] msg
                    world (:world state)]
                (if (and (#{:dirt :grass :tall-grass :shrub}
-                         (get-in world sapp))
-                        (not (:tree (frequencies (map #(get-in world %)
+                         (get-in-map world sapp))
+                        (not (:tree (frequencies (map #(get-in-map world %)
                                                       (far-ngbrs sapp 2 world)))))
-                        (= :tree (get-in world treep)))
-                 (assoc-in state (concat [:world] (second msg)) :tree)
+                        (= :tree (get-in-map world treep)))
+                 (update-in state [:world] #(assoc-in-map % (second msg) :tree))
                  state))
     :new-player (assoc-in state [:players (second msg)]
                           (assoc (nth msg 2) :p (:spawn-point state)))))
@@ -616,13 +596,13 @@
                    c-sites)
     :world (reduce (fn [w {:keys [p t x]}]
                      (if (>= t 100)
-                       (assoc-in w p (or x :dirt))
+                       (assoc-in-map w p (or x :dirt))
                        w))
                    world
                    c-sites)
     :players (reduce (fn [pls {:keys [p t x owner]}]
                        (if (and (>= t 100) (not x))
-                         (let [tile (get-in world p)]
+                         (let [tile (get-in-map world p)]
                            (assoc pls
                              owner (cond (#{:wall :windowed-wall :door} tile)
                                          (give-player (pls owner) tile 1)

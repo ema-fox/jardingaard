@@ -1,5 +1,5 @@
 (ns jardingaard.server
-  (:use [jardingaard util shared]
+  (:use [jardingaard util shared reducers worldgen]
         clojure.java.io)
   (:import [java.net ServerSocket Socket]
            [java.util Date]
@@ -11,8 +11,6 @@
 
 (def socket)
 
-(def world-size 100)
-
 (def bullet-speed 1)
 
 (def fr-counter (ref 0))
@@ -23,7 +21,7 @@
 
 (def pingss (ref {}))
 
-(def player-state (ref nil))
+(def player-states (ref {}))
 
 (def player-message-st (ref nil))
 
@@ -69,12 +67,25 @@
       (min 9 (int (/ (nth (sort pings) 5) 2)))
       0)))
 
+(defn state-for [[c {:keys [world players bunnies] :as state}] pid]
+  (let [p (get-in players [pid :p])]
+    [c (assoc state
+         :bunnies (if p (vec (take 50 (filter (fn a [{pb :p}]
+                                                (< (manhatten pb p) 50))
+                                              bunnies))))
+         :world (if p
+                  (let [[p0 p1] (round p)]
+                    (select-keys world (for [b0 [-32 0 32]
+                                             b1 [-32 0 32]]
+                                         (plus [b0 b1] [(bit-and high-mask p0)
+                                                        (bit-and high-mask p1)]))))))]))
+
 (defn update-clients []
-  (let [patch (gen-patch @player-state @world-state)
-        m [:patch-state patch]]
-    (ref-set player-state @world-state)
-    (doseq [[conn pid] @conns]
-      (send-client conn m))))
+  (doseq [[conn pid] @conns]
+    (let [pstate (state-for @world-state pid)
+          patch [:patch-state (gen-patch (@player-states pid) pstate)]]
+      (alter player-states assoc pid pstate)
+      (send-client conn patch))))
 
 (defn add-msg [delay msg]
    (alter (if (< delay 100)
@@ -88,11 +99,12 @@
           :when delay]
     (add-msg delay [:tile p]))
   (doseq [p ps
-          :when (= :tree (get-in @world-state (concat [1 :world] p)))]
+          :when (= :tree (get-in-map (get-in @world-state [1 :world]) p))]
     (doseq [delay [(rand-int 99999) (rand-int 99999)]]
       (add-msg delay
                [:sapling (plus p (minus [(rand-int 11) (rand-int 11)]
-                                        [5 5]))]))))
+                                        [5 5]))
+                p]))))
   
 (defn step! []
   (let [switch-t (+ (first @world-state) 100)]
@@ -103,11 +115,11 @@
                          [(inc c)
                           (binding [*seed* c]
                             (step state (@messages c)))]))
-    (tiles-delay (apply concat (for [[p0 p1s] (get-in (gen-patch old-state @world-state) [1 :world])
-                                     [p1 _] p1s
-                                     :let [p [p0 p1]]]
-                                 (conj (ngbrs p (get-in @world-state [1 :world]))
-                                       [p0 p1])))))
+    (tiles-delay (apply concat (for [[chunkp offsets] (get-in (gen-patch old-state @world-state) [1 :world])
+                                     [o0 o1s] offsets
+                                     [o1 _] o1s
+                                     :let [p (plus chunkp [o0 o1])]]
+                                 (conj (ngbrs p (get-in @world-state [1 :world])) p)))))
   (ref-set messages (into {} (filter #(<= (first @world-state)
                                           (first %))
                                      @messages))))
@@ -119,7 +131,7 @@
         (dosync
          (alter fr-counter inc))
         (inform-cls [:frame-count @fr-counter]))
-      (Thread/sleep (max 0 (- 33 (- (.getTime (Date.)) start-t)))))
+      (Thread/sleep (max 0 (- tick-duration (- (.getTime (Date.)) start-t)))))
     (recur)))
 
 (defn update-messages! []
@@ -138,7 +150,7 @@
     (let [origin-t (first @world-state)]
       (alter messages update-in [origin-t] conj
              [:new-player pid
-              {:inventar [[:gun 1] [:pickaxe 1]]
+              {:inventar [[:hands 1] [:gun 1] [:pickaxe 1]]
                :inventar-p 0
                :path nil
                :name name
@@ -198,23 +210,32 @@
          (alter pingss assoc pid (repeat 10 0))
          (alter latest-player-message assoc pid @fr-counter)
          (send-client conn [:hello pid])
-         (send-client conn [:patch-state (gen-patch nil @player-state)])
+         ;(send-client conn [:patch-state (gen-patch nil @player-state)])
          (send-client conn [:patch-messages (gen-patch nil @player-message-st) @fr-counter])))
       (.start (Thread. #(listen conn))))
     (recur)))
 
-(defn -main [& [sp]]
+(defn load-world! []
   (dosync
-   (def save-path sp)
+   (print "generating world...")
+   (flush)
    (ref-set world-state [0 (or (if save-path
                                  (try
                                    (read-string (slurp save-path))
                                    (catch java.io.FileNotFoundException e)))
                                (new-world world-size bullet-speed))])
+   (println " done.")
    (alter maxpid #(apply max % (keys (get-in @world-state [1 :players]))))
+   (print "predicting changes...")
+   (flush)
    (tiles-delay (for [p0 (range world-size)
                       p1 (range world-size)]
-                  [p0 p1])))
+                  [p0 p1]))
+   (println " done.")))
+
+(defn -main [& [sp]]
+  (def save-path sp)
+  (load-world!)
   (def socket (ServerSocket. 8282))
   (forkIO accept)
   (forkIO steps))
