@@ -399,9 +399,11 @@
                                (reshape [d x y w h]
                                  (dosync
                                   (ref-set size [w h])))))
+    (listen fr :window-closing (fn [_] (System/exit 0)))
     (listen can
             :key-pressed key-pressed
             :mouse-pressed mouse-pressed)
+    (pack! fr)
     (show! fr)
     (request-focus! can)
     (add-watch fr-counter :paint (fn [_ _ _ _]
