@@ -337,7 +337,7 @@
                                                    false "png")])
                           ['grass 'tall-grass 'dirt 'shrub 'door 'wall 'windowed-wall 'tree
                            'twig 'gun 'pickaxe 'tree-crown 'water 'sand 'steak 'thread 'fur
-                           'bunny 'deadbunny 'zombie 'player 'trunk]))))
+                           'bunny 'deadbunny 'zombie 'player 'trunk 'hands]))))
 
 (defn handle-msg [d]
   (dosync
