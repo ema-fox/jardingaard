@@ -77,8 +77,8 @@
                            (assoc b
                              :p newp
                              :ttl (if (some #((if (> ttl 495)
-                                                #{:wall :door :tree :sand :water}
-                                                #{:wall :door :tree :sand :water :windowed-wall})
+                                                #{:wall :door :tree}
+                                                #{:wall :door :tree :windowed-wall})
                                               (get-in-map world %))
                                             (line-affects p newp))
                                     0
