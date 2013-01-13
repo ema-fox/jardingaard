@@ -2,7 +2,7 @@
   (:gen-class)
   (:use [seesaw core]
         [clojure.java io]
-        [jardingaard util shared reducers])
+        [jardingaard util shared reducers rules])
   (:import [java.net Socket]
            [java.util Date]
            [java.io OutputStreamWriter InputStreamReader BufferedWriter BufferedReader]

@@ -1,11 +1,6 @@
 (ns jardingaard.shared
-  (:use [jardingaard util reducers]
+  (:use [jardingaard util reducers rules]
         [clojure.set :only [intersection]]))
-
-(def world-size (* 32 10))
-
-(def num-zombies 0)
-(def num-bunnies 2)
 
 (def tick-duration 33)
 
@@ -30,20 +25,7 @@
 
 (def ^:dynamic *seed*)
 
-(def human-walk-speeds {:dirt 1
-                        :door 1
-                        :grass 1.1
-                        :water 1.7
-                        :sand 1.3
-                        :tall-grass 1.3})
-
 (def walkable? (set (keys human-walk-speeds)))
-
-(def zombie-walk-speeds (into {} (map (fn [[k v]]
-                                        [k (if (= k :door)
-                                             (* 16 v)
-                                             (* 4 v))])
-                                      human-walk-speeds)))
 
 (def low-mask 31)
 
@@ -94,7 +76,7 @@
                          (let [newp (plus p (mult m bullet-speed))]
                            (assoc b
                              :p newp
-                             :ttl (if (some #((if (> ttl 497)
+                             :ttl (if (some #((if (> ttl 495)
                                                 #{:wall :door :tree :sand :water}
                                                 #{:wall :door :tree :sand :water :windowed-wall})
                                               (get-in-map world %))
@@ -424,12 +406,7 @@
                                              {:p (plus p (mult m 0.75))
                                               :ttl 500
                                               :m m}))
-          (and (= :pickaxe selected)
-               (#{:wall :shrub :windowed-wall :door :tree} (get-in-map (:world state) tilep))
-               (not (some #(= tilep (:p %)) (:c-sites state))))
-          (assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
-          (and (#{:wall :windowed-wall :door} selected)
-               (#{:grass :dirt :tall-grass} (get-in-map (:world state) tilep))
+          (and (interactions [selected (get-in-map (:world state) tilep)])
                (not (some #(= tilep (:p %)) (:c-sites state))))
           (assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
           true
@@ -464,26 +441,21 @@
 (defstep [players c-sites world]
   (let [[new-c-sites new-players]
         (ttmap (fn [cs [pid {:keys [p do-at inventar inventar-p] :as player}]]
-                 (let [selected (first (nth inventar inventar-p))]
                    (if (and do-at
                             (< (distance p do-at) 5)
                             (not (some #(= do-at (:p %)) cs)))
-                     (cond (and (= :pickaxe selected)
-                                (#{:wall :shrub :windowed-wall :door :tree}
-                                 (get-in-map world do-at)))
-                           [(conj cs {:p do-at :t 0 :owner pid})
-                            [pid (assoc player
-                                   :do-at nil
-                                   :path nil)]]
-                           (and (#{:wall :windowed-wall :door} selected)
-                                (#{:grass :dirt :tall-grass} (get-in-map world do-at)))
-                           [(conj cs {:p do-at :t 0 :x selected})
-                            [pid (assoc (steal-player player selected 1)
-                                   :do-at nil
-                                   :path nil)]]
-                           true
-                           [cs [pid player]])
-                     [cs [pid player]])))
+                     (let [selected (first (nth inventar inventar-p))
+                           foo (interactions [selected (get-in-map world do-at)])]
+                       (if foo
+                         [(conj cs {:p do-at :t 0 :owner pid :tile (:tile foo) :give (:give foo)})
+                          [pid (assoc (reduce (fn [pl [x n]]
+                                                (steal-player pl x n))
+                                              player
+                                              (:take foo))
+                                 :do-at nil
+                                 :path nil)]]
+                         [cs [pid player]]))
+                     [cs [pid player]]))
                c-sites
                players)]
     (assoc state
@@ -501,13 +473,6 @@
 (defn player-has? [{:keys [inventar]} x n]
   (some #(and (= (first %) x) (<= n (second %)))
         inventar))
-
-(def recipes {[:windowed-wall] {:wall 1
-                                :twig 5}
-              [:door] {:twig 13}
-              [:fur :steak :thread] {:bunny 1}
-              [:gun] {:twig 3
-                      :thread 2}})
 
 (defn build [player xs]
   (if-let [r (recipes xs)]
@@ -594,26 +559,19 @@
                      (if (< (:t cs) 100)
                        (assoc cs :t (inc (:t cs)))))
                    c-sites)
-    :world (reduce (fn [w {:keys [p t x]}]
+    :world (reduce (fn [w {:keys [p t tile]}]
                      (if (>= t 100)
-                       (assoc-in-map w p (or x :dirt))
+                       (assoc-in-map w p tile)
                        w))
                    world
                    c-sites)
-    :players (reduce (fn [pls {:keys [p t x owner]}]
-                       (if (and (>= t 100) (not x))
-                         (let [tile (get-in-map world p)]
-                           (assoc pls
-                             owner (cond (#{:wall :windowed-wall :door} tile)
-                                         (give-player (pls owner) tile 1)
-                                         (= tile :shrub)
-                                         (give-player (pls owner) :twig 4)
-                                         (= tile :tree)
-                                         (-> (pls owner)
-                                             (give-player :twig 23)
-                                             (give-player :trunk 1))
-                                         true
-                                         (pls owner))))
+    :players (reduce (fn [pls {:keys [p t give owner]}]
+                       (if (and (>= t 100))
+                         (assoc pls
+                           owner (reduce (fn [pl [x n]]
+                                           (give-player pl x n))
+                                         (pls owner)
+                                         give))
                          pls))
                      players
                      c-sites)))

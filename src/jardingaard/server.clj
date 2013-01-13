@@ -1,5 +1,5 @@
 (ns jardingaard.server
-  (:use [jardingaard util shared reducers worldgen]
+  (:use [jardingaard util shared reducers worldgen rules]
         clojure.java.io)
   (:import [java.net ServerSocket Socket]
            [java.util Date]
