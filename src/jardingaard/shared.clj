@@ -474,20 +474,29 @@
   (some #(and (= (first %) x) (<= n (second %)))
         inventar))
 
-(defn build [player xs]
-  (if-let [r (recipes xs)]
-    (if (every? (fn [[y n]]
-                  (player-has? player y n))
-                r)
-      (reduce (fn [pl [y n]]
-                (steal-player pl y n))
-              (reduce (fn [pl x]
-                        (give-player pl x 1))
-                      player
-                      xs)
-              r)
-      player)
-    player))
+(defn build [{:keys [c-sites world players] :as state} pid xs]
+  (let [player (players pid)
+        p (round (:p player))
+        r (recipes xs)
+        freespot (first (filter #(and (#{:grass :dirt} (get-in-map world %))
+                                      (not (some (fn [c] (= % (:p c))) c-sites)))
+                                (far-ngbrs p 2 world)))]
+    (if (and r
+             freespot
+             (every? (fn [[y n]]
+                       (player-has? player y n))
+                     r))
+      (assoc state
+        :players (assoc players
+                   pid (reduce (fn [pl [y n]]
+                                 (steal-player pl y n))
+                               player
+                               r))
+        :c-sites (conj c-sites {:p freespot :t 0 :owner pid
+                                :tile (get-in-map world freespot) :give (map (fn [x]
+                                                                               [x 1])
+                                                                             xs)}))
+      state)))
 
 (defn step-tile [p w]
   (let [tile (get-in-map w p)
@@ -532,7 +541,7 @@
                :shot (shot state pid (second cmd))
                :decip (update-in state [:players pid] decip)
                :incip (update-in state [:players pid] incip)
-               :build (update-in state [:players pid] build (second cmd))))
+               :build (build state pid (second cmd))))
     :tile (update-in state [:world]
                      #(assoc-in-map % (second msg)
                                     (second (step-tile (second msg) %))))
