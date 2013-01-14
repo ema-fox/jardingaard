@@ -206,11 +206,14 @@
         (set-color! gl 0 0 0)
         (fill-rects! gl (for [{p :p} bullets]
                           [(plus [12 12] (mult p tsz)) [5 5]])))
-      (let [{:keys [inventar inventar-p]} (players @hello)
+      (let [{:keys [inventar inventar-p path]} (players @hello)
             ninventar (count inventar)
             pb [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
             pa (minus pb offset)
             bs (possible-recipes)]
+        (set-color! gl 0 0 0)
+        (fill-rects! gl (for [p path]
+                          [(plus (mult p tsz) [14 14]) [4 4]]))
         (set-color! gl 20 40 10)
         (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
                               (if @build-index

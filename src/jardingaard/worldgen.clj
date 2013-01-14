@@ -4,10 +4,10 @@
 (defn tile-type [xs] ;[height vegetation]
   (let [ys (map #(int (* 5 %)) xs)]
     (get-in [[:water :water      :water      :water      :water]
-             [:sand  :sand       :dirt       :grass      :grass]
-             [:dirt  :grass      :grass      :tall-grass :tall-grass]
-             [:wall  :tall-grass :tall-grass :shrub      :shrub]
-             [:wall  :wall       :dirt       :tree       :tree]]
+             [:sand  :dirt       :grass      :tall-grass :tree]
+             [:dirt  :grass      :tall-grass :shrub      :tree]
+             [:dirt  :grass      :tall-grass :shrub      :tree]
+             [:wall  :wall       :wall       :wall       :wall]]
             ys)))
 
 (defn gen-world [world-size]
