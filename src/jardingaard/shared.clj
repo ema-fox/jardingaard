@@ -406,6 +406,13 @@
                                              {:p (plus p (mult m 0.75))
                                               :ttl 500
                                               :m m}))
+          (= :spear selected)
+          (assoc state
+            :bullets (conj (:bullets state) (let [m (direction p goalp)]
+                                              {:p (plus p (mult m 0.75))
+                                               :ttl 500
+                                               :m m}))
+            :players (update-in (:players state) [pid] steal-player :spear 1))
           (and (interactions [selected (get-in-map (:world state) tilep)])
                (not (some #(= tilep (:p %)) (:c-sites state))))
           (assoc-in (walk state pid tilep) [:players pid :do-at] tilep)

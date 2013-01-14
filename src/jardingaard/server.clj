@@ -150,7 +150,7 @@
     (let [origin-t (first @world-state)]
       (alter messages update-in [origin-t] conj
              [:new-player pid
-              {:inventar [[:hands 1] [:gun 1] [:pickaxe 1]]
+              {:inventar [[:hands 1] [:gun 1] [:pickaxe 1] [:spear 100]]
                :inventar-p 0
                :path nil
                :name name

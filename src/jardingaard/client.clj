@@ -211,7 +211,7 @@
             pb [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
             pa (minus pb offset)
             bs (possible-recipes)]
-        (set-color! gl 0 0 0)
+        (set-color! gl 220 180 20)
         (fill-rects! gl (for [p path]
                           [(plus (mult p tsz) [14 14]) [4 4]]))
         (set-color! gl 20 40 10)
@@ -294,20 +294,27 @@
   (dosync
    (alter cl-messages update-in [@fr-counter] conj [:plcmd @hello m])))
 
+(defn scroll [x]
+  (if @build-index
+    (dosync (alter build-index #(let [n (count (possible-recipes))]
+                                  (if (= n 0)
+                                    nil
+                                    (mod (({:inc inc :dec dec} x) %) n)))))
+    (add-msg [({:inc :incip
+                :dec :decip} x)])))
+
+(defn mouse-wheeled [e]
+  (let [x (.getWheelRotation e)]
+    (if (neg? x)
+      (dotimes [_ (* -1 x)]
+        (scroll :dec))
+      (dotimes [_ x]
+        (scroll :inc)))))
+
 (defn key-pressed [e]
   (condp = (.getKeyCode e)
-    KeyEvent/VK_A (if @build-index
-                    (dosync (alter build-index #(let [n (count (possible-recipes))]
-                                                  (if (= n 0)
-                                                    nil
-                                                    (mod (inc %) n)))))
-                    (add-msg [:incip]))
-    KeyEvent/VK_Q (if @build-index
-                    (dosync (alter build-index #(let [n (count (possible-recipes))]
-                                                  (if (= n 0)
-                                                    nil
-                                                    (mod (dec %) (count (possible-recipes)))))))
-                    (add-msg [:decip]))
+    KeyEvent/VK_A (scroll :inc)
+    KeyEvent/VK_Q (scroll :dec)
     KeyEvent/VK_TAB (dosync (alter build-index #(if % nil 0)))
     KeyEvent/VK_SPACE (if (< @build-index (count (possible-recipes)))
                         (add-msg [:build (nth (possible-recipes) @build-index)]))
@@ -406,6 +413,7 @@
     (listen fr :window-closing (fn [_] (System/exit 0)))
     (listen can
             :key-pressed key-pressed
+            :mouse-wheel-moved mouse-wheeled
             :mouse-pressed mouse-pressed)
     (pack! fr)
     (show! fr)
