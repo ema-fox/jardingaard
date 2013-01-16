@@ -7,7 +7,7 @@
              [:sand  :dirt       :grass      :tall-grass :tree]
              [:dirt  :grass      :tall-grass :shrub      :tree]
              [:dirt  :grass      :tall-grass :shrub      :tree]
-             [:wall  :wall       :wall       :wall       :wall]]
+             [:rock  :rock       :rock       :rock       :rock]]
             ys)))
 
 (defn gen-world [world-size]

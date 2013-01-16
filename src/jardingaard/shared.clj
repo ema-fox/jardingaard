@@ -276,7 +276,7 @@
                                 (and (first path)
                                      (< 0.1 (distance (last path) p)))
                                 (new-pos bunny human-walk-speeds world)
-                                (= 0 (mod (prng *seed* seed (round p)) 99))
+                                (= 0 (mod (prng *seed* seed (round p)) 9))
                                 (let [foo0 (mod (prng *seed* seed 4321 (round p)) 11)
                                       foo1 (mod (prng *seed* seed 1234 (round p)) 11)
                                       goal (round (plus p (minus [foo0 foo1] [5 5])))]
@@ -298,12 +298,12 @@
                             (< (distance (last path) p) 0.1)
                             (= :tall-grass (get-in-map world (round p))))
                      [(assoc-in-map world (round p) :grass)
-                      (update-in bunny [:energy] (partial + 300))]
+                      (update-in bunny [:energy] (partial + 200))]
                      [world bunny]))
                  world
                  nbs)
           nbs3 (mapcat (fn [{:keys [energy seed] :as bunny}]
-                         (if (< energy 5000)
+                         (if (< energy 50000)
                            [bunny]
                            [(assoc bunny :energy 2500)
                             (assoc bunny :energy 2500 :seed (+ *seed* seed))]))
@@ -526,9 +526,11 @@
                              :shrub])
           :shrub (cond (:tree ns)
                        [(rand-int 999) :dirt]
-                       (and (:shrub ns)
-                            (< 3 (:shrub ns))
-                            (not= 0 (mod (prng p) 3)))
+                       (let [ns2 (frequencies (map #(get-in-map w %)
+                                                   (far-ngbrs p 2 w)))]
+                         (and (:shrub ns2)
+                              (< 5 (:shrub ns2))
+                              (not= 0 (mod (prng p) 3))))
                        [(rand-int 99)
                         :dirt])
           :tree (cond (:tree ns)

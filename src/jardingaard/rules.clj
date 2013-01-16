@@ -18,12 +18,14 @@
                                              (* 4 v))])
                                       human-walk-speeds)))
 
-(def placable [:wall :windowed-wall :door])
+(def placable [:wall :windowed-wall :door :rock])
 
 (def places [:dirt :grass :tall-grass])
 
 (def interactions (into {[:hands :shrub] {:give {:twig 3}
                                           :tile :dirt}
+                         [:hands :rock] {:give {:stone 1}
+                                         :tile :rock}
                          [:pickaxe :shrub] {:give {:twig 4}
                                             :tile :dirt}
                          [:pickaxe :tree] {:give {:twig 23
@@ -41,6 +43,11 @@
 (def recipes {[:windowed-wall] {:wall 1
                                 :twig 5}
               [:door] {:twig 13}
+              [:pickaxe] {:stone 2
+                          :twig 3}
+              [:spear] {:stone 1
+                        :twig 2}
+              [:wall] {:rock 1}
               [:fur :steak :thread] {:bunny 1}
               [:gun] {:twig 3
                       :thread 2}})
