@@ -191,7 +191,7 @@
         (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
         (draw-tiles! gl (txtr :zombie) (map :p zombies))
         (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
-        (.glColor4f gl 1.0 1.0 1.0 0.2)
+        (.glColor4f gl 1.0 1.0 1.0 0.4)
         (draw-rects! gl (txtr :tree-crown)
                      (for [p (:tree foo)]
                        [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)]))
