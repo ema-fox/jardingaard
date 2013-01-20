@@ -23,21 +23,19 @@
 (def places [:dirt :grass :tall-grass])
 
 (def interactions (into {[:hands :shrub] {:give {:twig 3}
-                                          :tile :dirt}
+                                          :tile nil}
                          [:hands :rock] {:give {:stone 1}
                                          :tile :rock}
                          [:pickaxe :shrub] {:give {:twig 4}
-                                            :tile :dirt}
+                                            :tile nil}
                          [:pickaxe :tree] {:give {:twig 23
                                                   :trunk 1}
-                                           :tile :dirt}}
-                        (concat (for [pla placable
-                                      plb places]
-                                  [[pla plb] {:take {pla 1}
-                                              :tile pla}])
-                                (for [pla placable]
-                                  [[:pickaxe pla] {:give {pla 1}
-                                                   :tile :dirt}]))))
+                                           :tile nil}}
+                        (apply concat (for [pla placable]
+                                        [[[pla nil] {:take {pla 1}
+                                                     :tile pla}]
+                                         [[:pickaxe pla] {:give {pla 1}
+                                                          :tile nil}]]))))
 
 
 (def recipes {[:windowed-wall] {:wall 1

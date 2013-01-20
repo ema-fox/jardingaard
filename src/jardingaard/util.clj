@@ -17,6 +17,11 @@
     [(first (last foo))
      (map second (rest foo))]))
 
+(defn assoc-seq [col & keys-vals]
+  (let [keys (butlast keys-vals)
+        vals (last keys-vals)]
+    (into col (map vector keys vals))))
+
 (defn insert-at [i xs x]
   (concat (take i xs) [x] (drop i xs)))
 
@@ -146,39 +151,42 @@
 
 (declare gen-patch)
 
-(defn gen-map-patch [a b]
-  (persistent! (reduce (fn [res k]
-                         (if (= (a k) (b k))
-                           res
-                           (assoc! res k (gen-patch (a k) (b k)))))
-                       (transient {})
-                       (cat (keys a) (keys b)))))
+(let [not-there (Object.)]
+  (defn gen-map-patch [a b]
+    (persistent! (reduce (fn [res k]
+                           (if (= (a k) (b k))
+                             res
+                             (assoc! res k (gen-patch (a k) (get b k not-there)))))
+                         (transient {})
+                         (cat (keys a) (keys b)))))
 
-(defn gen-vec-patch [a b]
-  (persistent! (reduce (fn [res k]
-                         (if (= (a k) (b k))
-                           res
-                           (assoc! res k (gen-patch (a k) (b k)))))
-                       (transient {})
-                       (rrange 0 (count a)))))
+  (defn gen-vec-patch [a b]
+    (persistent! (reduce (fn [res k]
+                           (if (= (a k) (b k))
+                             res
+                             (assoc! res k (gen-patch (a k) (get b k not-there)))))
+                         (transient {})
+                         (rrange 0 (count a)))))
 
-(defn gen-patch [a b]
-  (cond (and (map? a)
-             (map? b))
-        (gen-map-patch a b)
-        (and (vector? a)
-             (vector? b)
-             (= (count a) (count b)))
-        (gen-vec-patch a b)
-        true
-        [b]))
+  (defn gen-patch [a b]
+    (cond (and (map? a)
+               (map? b))
+          (gen-map-patch a b)
+          (and (vector? a)
+               (vector? b)
+               (= (count a) (count b)))
+          (gen-vec-patch a b)
+          (= b not-there)
+          nil
+          true
+          [b])))
 
 (defn apply-patch [a p]
   (cond (vector? p)
         (first p)
         (map? p)
         (reduce (fn [b [k v]]
-                  (if (= v [nil])
+                  (if (= v nil)
                     (dissoc b k)
                     (assoc b k (apply-patch (a k) v))))
                 a

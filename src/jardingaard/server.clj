@@ -67,18 +67,26 @@
       (min 9 (int (/ (nth (sort pings) 5) 2)))
       0)))
 
-(defn state-for [[c {:keys [world players bunnies] :as state}] pid]
+(defn state-for [[c {:keys [bworld mworld players bunnies] :as state}] pid]
   (let [p (get-in players [pid :p])]
-    [c (assoc state
-         :bunnies (if p (vec (take 50 (filter (fn a [{pb :p}]
-                                                (< (manhatten pb p) 50))
-                                              bunnies))))
-         :world (if p
-                  (let [[p0 p1] (round p)]
-                    (select-keys world (for [b0 [-32 0 32]
-                                             b1 [-32 0 32]]
-                                         (plus [b0 b1] [(bit-and high-mask p0)
-                                                        (bit-and high-mask p1)]))))))]))
+    [c (assoc-seq state
+                  :bunnies
+                  :bworld
+                  :mworld
+                  (if p [(vec (take 50 (filter (fn a [{pb :p}]
+                                                 (< (manhatten pb p) 50))
+                                               bunnies)))
+                         (let [[p0 p1] (round p)]
+                           (select-keys bworld (for [b0 [-32 0 32]
+                                                     b1 [-32 0 32]]
+                                                 (plus [b0 b1] [(bit-and high-mask p0)
+                                                                (bit-and high-mask p1)]))))
+                         (let [[p0 p1] (round p)]
+                           (select-keys mworld (for [b0 [-32 0 32]
+                                                     b1 [-32 0 32]]
+                                                 (plus [b0 b1] [(bit-and high-mask p0)
+                                                                (bit-and high-mask p1)]))))]
+                      [nil nil nil]))]))
 
 (defn update-clients []
   (doseq [[conn pid] @conns]
@@ -94,10 +102,11 @@
           update-in [(+ (first @world-state) delay)] conj msg))
 
 (defn tiles-delay [ps]
-  (doseq [p ps
-          :let [delay (first (step-tile p (:world (second @world-state))))]
-          :when delay]
-    (add-msg delay [:tile p]))
+  (let [st (second @world-state)]
+    (doseq [p ps
+            :let [delay (first (step-tile p (:bworld st) (:mworld st)))]
+            :when delay]
+      (add-msg delay [:tile p])))
   (doseq [p ps
           :when (= :tree (get-in-map (get-in @world-state [1 :world]) p))]
     (doseq [delay [(rand-int 99999) (rand-int 99999)]]
@@ -115,11 +124,12 @@
                          [(inc c)
                           (binding [*seed* c]
                             (step state (@messages c)))]))
-    (tiles-delay (apply concat (for [[chunkp offsets] (get-in (gen-patch old-state @world-state) [1 :world])
+    (tiles-delay (apply concat (for [[chunkp offsets] (mapcat #(get-in (gen-patch old-state @world-state) [1 %])
+                                                              [:bworld :mworld])
                                      [o0 o1s] offsets
                                      [o1 _] o1s
                                      :let [p (plus chunkp [o0 o1])]]
-                                 (conj (ngbrs p (get-in @world-state [1 :world])) p)))))
+                                 (conj (ngbrs p (get-in @world-state [1 :bworld])) p)))))
   (ref-set messages (into {} (filter #(<= (first @world-state)
                                           (first %))
                                      @messages))))

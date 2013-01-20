@@ -174,7 +174,7 @@
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
   (if (and (get-in @state [1 :players @hello])
            (< (- @fr-counter (first @state)) 40))
-    (let [{:keys [players bullets world c-sites world bunnies deadbunnies zombies]} (current-state)
+    (let [{:keys [players bullets world c-sites bworld mworld bunnies deadbunnies zombies]} (current-state)
           pfoo (round (get-in players [@hello :p]))
           offset (minus (mult size 0.5) (mult (get-in players [@hello :p]) tsz))]
       (prepare-gl! gl offset size)
@@ -182,8 +182,13 @@
       (.glEnable gl GL2/GL_TEXTURE_2D)
       (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
       (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-      (let [foo (tile-groups world pfoo (plus [1 1] (round (div size (* tsz 2.0)))))]
-        (doseq [[bg tiles] foo
+      (let [[btiles mtiles] (map #(tile-groups % pfoo (plus [1 1] (round (div size (* tsz 2.0)))))
+                                 [bworld mworld])]
+        (doseq [[bg tiles] btiles
+                :let [tex (txtr bg)]
+                :when tex]
+          (draw-tiles! gl tex tiles))
+        (doseq [[bg tiles] mtiles
                 :let [tex (txtr bg)]
                 :when tex]
           (draw-tiles! gl tex tiles))
@@ -193,7 +198,7 @@
         (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
         (.glColor4f gl 1.0 1.0 1.0 0.4)
         (draw-rects! gl (txtr :tree-crown)
-                     (for [p (:tree foo)]
+                     (for [p (:tree mtiles)]
                        [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)]))
         (.glDisable gl GL2/GL_TEXTURE_2D)
         (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
