@@ -352,8 +352,9 @@
                              (TextureIO/newTexture (resource (str name ".png") class-loader)
                                                    false "png")])
                           ['grass 'tall-grass 'dirt 'shrub 'door 'wall 'windowed-wall 'tree
-                           'twig 'gun 'pickaxe 'tree-crown 'water 'sand 'steak 'thread 'fur
-                           'rock 'stone 'spear
+                           'twig 'gun 'pickaxe 'tree-crown 'water 'sand 'steak 'steak-fried
+                           'thread 'fur
+                           'rock 'stone 'spear 'campfire-on 'campfire-off 'campfire-empty
                            'bunny 'deadbunny 'zombie 'player 'trunk 'hands]))))
 
 (defn handle-msg [d]

@@ -26,6 +26,14 @@
                                           :tile nil}
                          [:hands :rock] {:give {:stone 1}
                                          :tile :rock}
+                         [:stone nil] {:take {:stone 9}
+                                       :tile :campfire-empty}
+                         [:twig :campfire-empty] {:take {:twig 7}
+                                                   :tile :campfire-off}
+                         [:stone :campfire-off] {:tile :campfire-on}
+                         [:steak :campfire-on] {:take {:steak 1}
+                                                :give {:steak-fried 1}
+                                                :tile :campfire-on}
                          [:pickaxe :shrub] {:give {:twig 4}
                                             :tile nil}
                          [:pickaxe :tree] {:give {:twig 23
