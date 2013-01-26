@@ -1,14 +1,17 @@
 (ns jardingaard.reducers
   (:use [clojure.core.protocols]))
 
-(defn rrange [start end]
-  (reify
-    CollReduce
-    (coll-reduce [_ f val] (loop [i start
-                                  res val]
-                             (if (< i end)
-                               (recur (inc i) (f res i))
-                               res)))))
+(defn rrange
+  ([end] (rrange 0 end 1))
+  ([start end] (rrange start end 1))
+  ([start end step]
+     (reify
+       CollReduce
+       (coll-reduce [_ f val] (loop [i start
+                                     res val]
+                                (if (< i end)
+                                  (recur (+ i step) (f res i))
+                                  res))))))
 
 (defn product [a b]
   (reify

@@ -1,5 +1,5 @@
 (ns jardingaard.server
-  (:use [jardingaard util shared reducers worldgen rules]
+  (:use [jardingaard util shared reducers worldgen rules helpers]
         clojure.java.io)
   (:import [java.net ServerSocket Socket]
            [java.util Date]
@@ -114,7 +114,16 @@
                [:sapling (plus p (minus [(rand-int 11) (rand-int 11)]
                                         [5 5]))
                 p]))))
-  
+
+(defn ensure-bunnies [{:keys [bunnies spawn-point] :as state}]
+  (if (and (< (count bunnies) num-bunnies)
+           (= 0 (mod (prng *seed* 565) 9)))
+    (assoc state
+      :bunnies (conj bunnies {:p spawn-point
+                              :energy 500
+                              :seed *seed*}))
+    state))
+
 (defn step! []
   (let [switch-t (+ (first @world-state) 100)]
     (alter messages update-in [switch-t] concat (@future-messages switch-t))
@@ -123,8 +132,9 @@
     (alter world-state (fn [[c state]]
                          [(inc c)
                           (binding [*seed* c]
-                            (step state (@messages c)))]))
-    (tiles-delay (apply concat (for [[chunkp offsets] (mapcat #(get-in (gen-patch old-state @world-state) [1 %])
+                            (ensure-bunnies (step state (@messages c))))]))
+    (tiles-delay (apply concat (for [[chunkp offsets] (mapcat #(gen-patch (get-in old-state [1 %])
+                                                                          (get-in @world-state [1 %]))
                                                               [:bworld :mworld])
                                      [o0 o1s] offsets
                                      [o1 _] o1s
@@ -167,8 +177,31 @@
                :died 0
                :hp 20}]))))
 
-(def foo (atom 0))
-
+(defn process-msg [m pid conn]
+  (dosync
+   (condp = (first m)
+     :frame-count
+     (do (alter pingss update-in [pid]
+                (fn a [pings]
+                  (take 10 (conj pings (- @fr-counter (second m))))))
+         (cond (< (+ (nth m 2) (half-median-ping pid)) @fr-counter)
+               (send-client conn [:skew :plus])
+               (> (+ (nth m 2) (half-median-ping pid)) @fr-counter)
+               (send-client conn [:skew :minus])))
+     :save (spit save-path (second @world-state))
+     :name (do (add-player! pid (second m))
+               (log [:name (second m) @conn]))
+     :cmds
+     (let [[_ origin-t cmds] m]
+       (alter latest-player-message assoc pid origin-t)
+       (alter messages update-in [origin-t] concat cmds)
+       (loop []
+         (when (< (first @world-state) (apply min (vals @latest-player-message)))
+           (step!)
+           (recur)))
+       (update-clients)
+       (update-messages!)))))
+  
 (defn listen [conn]
   (let [r (LineNumberingPushbackReader. (BufferedReader. (InputStreamReader. (.getInputStream ^Socket @conn))))
         eof (Object.)
@@ -181,32 +214,8 @@
                       eof))]
             (if (= m eof)
               false
-              (dosync
-               (condp = (first m)
-                 :frame-count
-                 (do (alter pingss update-in [pid]
-                            (fn a [pings]
-                              (take 10 (conj pings (- @fr-counter (second m))))))
-                     (cond (< (+ (nth m 2) (half-median-ping pid)) @fr-counter)
-                           (send-client conn [:skew :plus])
-                           (> (+ (nth m 2) (half-median-ping pid)) @fr-counter)
-                           (send-client conn [:skew :minus])))
-                 :save (spit save-path (second @world-state))
-                 :name (do (add-player! pid (second m))
-                           (log [:name (second m) @conn]))
-                 :cmds
-                 (let [[_ origin-t cmds] m]
-                   (alter latest-player-message assoc pid origin-t)
-                   (alter messages update-in [origin-t] concat cmds)
-                   (loop []
-                     (when (< (first @world-state) (apply min (vals @latest-player-message)))
-                       (step!)
-                       (recur)))
-                  ; (when (or false (= 0 (mod @foo 10)))
-                     (update-clients)
-                     (update-messages!);)
-                   (swap! foo inc)))
-               true)))
+              (do (process-msg m pid conn)
+                  true)))
         (recur)))))
 
 (defn accept []

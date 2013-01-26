@@ -1,19 +1,19 @@
 (ns jardingaard.worldgen
-  (:use [jardingaard shared util]))
+  (:use [jardingaard helpers util]))
 
 (defn tile-type [xs] ;[height vegetation]
   (let [ys (map #(int (* 5 %)) xs)]
     [(get-in [[:water :water :water      :water      :water]
               [:sand  :dirt  :grass      :tall-grass :dirt]
               [:dirt  :grass :tall-grass :tall-grass :dirt]
-              [:dirt  :grass :tall-grass :tall-grass :dirt]
-              [:dirt  :sand  :dirt       :grass      :tall-grass]]
+              [:granite-floor :dirt          :grass  :tall-grass :dirt]
+              [:granite-floor :granite-floor :granite-floor :granite-floor :granite-floor]]
              ys)
-     (get-in [[nil   :rock nil   nil    nil]
-              [nil   nil   nil   nil    :tree]
-              [nil   nil   nil   :shrub :tree]
-              [nil   nil   nil   :shrub :tree]
-              [:rock :rock :rock :rock  :rock]]
+     (get-in [[nil      :rock    nil      nil         nil]
+              [nil      nil      nil      :shrub-pear :tree]
+              [nil      nil      nil      :shrub      :tree]
+              [:rock    :rock    nil      :rock       :rock]
+              [:granite :granite :granite :granite    :granite]]
              ys)]))
 
 (defn gen-world [world-size]
@@ -51,13 +51,15 @@
         [bacc macc]))))
 
 (defn new-world [world-size bullet-speed]
-  (assoc-seq {:players {}
-              :bullets []
-              :c-sites []
-              :zombies []
-              :bunnies []
-              :deadbunnies []
-              :bullet-speed bullet-speed
-              :spawn-point [(/ world-size 2) (/ world-size 2)]}
-             :bworld :mworld
-             (gen-world world-size)))
+  (reduce (fn [st f]
+            (f st))
+          (assoc-seq {:players {}
+                      :bullets []
+                      :c-sites []
+                      :bunnies []
+                      :deadbunnies []
+                      :bullet-speed bullet-speed
+                      :spawn-point [(/ world-size 2) (/ world-size 2)]}
+                     :bworld :mworld
+                     (gen-world world-size))
+          @gen-fns))

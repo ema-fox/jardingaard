@@ -1,75 +1,8 @@
 (ns jardingaard.shared
-  (:use [jardingaard util reducers rules]
-        [clojure.set :only [intersection]]))
+  (:require [jardingaard zombie])
+  (:use [jardingaard util reducers rules helpers]))
 
 (def tick-duration 33)
-
-(def step-fns [])
-
-(defn check-world [state]
-  (:bworld state))
-
-(defn check-players-map [state]
-  (map? (:players state)))
-
-(defn check-players-p [state]
-  (every? #(get-in % [1 :p])
-          (:players state)))
-
-(defmacro defstep [args & body]
-  `(def step-fns (conj step-fns (fn [{:keys ~args :as ~'state}]
-                                  {:post [(check-world ~'%)
-                                          (check-players-map ~'%)
-                                          (check-players-p ~' %)]}
-                                  ~@body))))
-
-(def ^:dynamic *seed*)
-
-                                        ;(def walkable? (set (keys human-walk-speeds)))
-(defn walkable? [tt]
-  (or (not tt) (= :door tt)))
-
-(def ^Integer low-mask 31)
-
-(def ^Integer high-mask (bit-not low-mask))
-
-(defn assoc-in-map [m [p0 p1] v]
-  (let [p0a (bit-and p0 high-mask)
-        p0b (bit-and p0 low-mask)
-        p1a (bit-and p1 high-mask)
-        p1b (bit-and p1 low-mask)]
-    (if-let [mchunk (m [p0a p1a])]
-      (let [line (mchunk p0b)]
-        (assoc m [p0a p1a] (assoc mchunk p0b (assoc line p1b v))))
-      m)))
-
-(defn get-in-map [m [^Integer p0 ^Integer p1]]
-  (let [p0a (bit-and p0 high-mask)
-        p0b (bit-and p0 low-mask)
-        p1a (bit-and p1 high-mask)
-        p1b (bit-and p1 low-mask)]
-    (get (get (get m [p0a p1a]) p0b) p1b)))
-
-(defn line-affects [start goal]
-  (let [goal (if (== (first goal) (first start))
-               (plus goal [0.0001 0])
-               goal)
-        [d0 d1] (minus goal start)
-        slope (/ d1 d0)
-        [a b] (sort [(first start) (first goal)])
-        xline (concat [a]
-                      (range (+ 0.5 (floor (+ 0.5 a)))
-                             (+ 0.5 (floor (+ 0.5 b))))
-                      [b])]
-    (mapcat (fn [a b]
-              (let [x (floor (/ (+ a b 1) 2))
-                    ya (floor (+ (second start) (* slope (- a (first start))) 0.5))
-                    yb (floor (+ (second start) (* slope (- b (first start))) 0.5))]
-                (map (fn [y]
-                       [x y])
-                     (range (min ya yb) (inc (max ya yb))))))
-            xline
-            (rest xline))))
 
 (defstep [bullets mworld bullet-speed]
   (assoc state
@@ -87,35 +20,6 @@
                                     (dec ttl))))))
                   (filter #(< 0 (:ttl %))))))
 
-(defn new-pos [{:keys [p path] :as entity} walk-speeds bworld]
-  (let [npath (if (and (first path)
-                       (< (distance p (first path)) 0.1))
-                (rest path)
-                path)]
-    (assoc (if (first npath)
-             (assoc entity
-               :p (plus p (mult (direction p (first npath))
-                                (min (/ 0.25
-                                        (or (walk-speeds (get-in-map bworld
-                                                                     (round p)))
-                                            1))
-                                     (distance p (first npath))))))
-             entity)
-      :path npath)))
-
-(defn manhatten [[a0 a1] [b0 b1]]
-  (+ (Math/abs (int (- a0 b0)))
-     (Math/abs (int (- a1 b1)))))
-
-(defn unchecked-ngbrs [p]
-  [(plus p [0 1])
-   (plus p [0 -1])
-   (plus p [1 0])
-   (plus p [-1 0])])
-
-(defn ngbrs [p w]
-  (filter #(get-in-map w %) (unchecked-ngbrs p)))
-
 (defn far-ngbrs [[p0 p1 :as p] d w]
   (filter #(and (not= p%)
                 (get-in-map w %))
@@ -123,157 +27,7 @@
                 a1 (range (- p1 d) (+ 1 p1 d))]
             [a0 a1])))
 
-(defrecord path-stub [ps d h])
-
-(def directions (apply concat (take 4 (iterate #(map (fn [[p0 p1]]
-                                                       [p1 (* -1 p0)])
-                                                     %)
-                                               [[1 0]
-                                                [1 1]
-                                                [2 1]
-                                                [1 2]
-                                                [3 1]
-                                                [1 3]
-                                                [3 2]
-                                                [2 3]]))))
-
-(def tdstore (into {} (map (fn [d]
-                             [d (disj (set (line-affects [0 0] d))
-                                      [0 0])])
-                           directions)))
-
-(def fdstore (into {} (mapmap (fn [_ xs]
-                                (eval `(fn [[^Integer ~'p0 ^Integer ~'p1] ~'w]
-                                         (and ~@(for [[x0 x1] xs]
-                                                  `(walkable? (get-in-map ~'w [(+ ~x0 ~'p0)
-                                                                               (+ ~x1 ~'p1)])))))))
-                              tdstore)))
-
-(defn test-direction [p d w]
-  ((fdstore d) p w))
-;  (every? #(walkable? (get-in-map w (plus p %))) (tdstore d)))
-
-(defn route [start goal walk-speeds mw]
-  {:pre [(every? integer? start)
-         (every? integer? goal)]}
-  (loop [open {start (path-stub. ()
-                                 0
-                                 (manhatten start goal))}
-         other-open {goal (path-stub. (list goal)
-                                      0
-                                      (manhatten start goal))}
-         swapped false
-         closed #{}]
-    (if (first open)
-      (let [[endp {:keys [ps d h]}] (reduce (fn a [[_ {da :d ha :h} :as a] [_ {db :d hb :h} :as b]]
-                                              (if (< (+ da ha) (+ db hb))
-                                                a
-                                                b))
-                                            open)]
-        (if (other-open endp)
-          (let [cp (reduce (fn [a b]
-                             (if (< (+ (:d (open a)) (:d (other-open a)))
-                                    (+ (:d (open b)) (:d (other-open b))))
-                               a
-                               b))
-                           (intersection (set (keys open)) (set (keys other-open))))
-                other-side (other-open cp)]
-            (if swapped
-              (concat (reverse (:ps other-side)) (rest ps))
-              (concat (reverse ps) (rest (:ps other-side)))))
-          (recur other-open
-                 (persistent! (loop [m (dissoc! (transient open) endp)
-                                     [p & newps] (->> directions
-                                                      (keep (fn c [%]
-                                                              (let [p (plus endp %)]
-                                                                (if (and (not (closed p))
-                                                                         (< (manhatten p goal) 30)
-                                                                         (test-direction endp % mw))
-                                                                  p)))))]
-                                (if p
-                                  (let [d (+ (distance endp p) d)
-                                        h (distance p (if swapped
-                                                        start
-                                                        goal))
-                                        a (m p)]
-                                    (recur (if (and a
-                                                    (< (+ (:d a) (:h a))
-                                                       (+ d h)))
-                                             m
-                                             (assoc! m p (path-stub. (conj ps p)
-                                                                     d
-                                                                     h)))
-                                           newps))
-                                  m)))
-                 (not swapped)
-                 (conj closed endp))))
-      nil)))
-
-(defn step-bullets&entities [f pf bullet-speed bus entities]
-  (ttmap (fn [bullets entity]
-           (let [p (pf entity)
-                 newbullets 
-                 (filter (fn [{bp :p m :m}]
-                           (< 0.5 (distance p (p-on-line bp
-                                                         (plus bp (mult m bullet-speed))
-                                                         p))))
-                         bullets)]
-             [newbullets
-              (f entity (- (count bullets) (count newbullets)))]))
-         bus
-         entities))
-
-(defstep [zombies players spawn-point bworld mworld]
-  (assoc state
-    :zombies (mapv (fn [{:keys [p path seed cooldown] :as zombie}]
-                     (assoc (if (and (seq path)
-                                     (< 0.1 (distance (last path) p)))
-                              (new-pos zombie zombie-walk-speeds bworld)
-                              (if-let [goal (and (= 0 (mod (prng *seed* seed (round p)) 9))
-                                                 (some (fn [[_ {pp :p}]]
-                                                         (if (< (distance p pp) 20)
-                                                           pp))
-                                                       players))]
-                                (assoc zombie
-                                  :path (route (round p) (round goal) zombie-walk-speeds mworld))
-                                zombie))
-                       :cooldown (max 0 (dec cooldown))))
-                   (if (< (count zombies) num-zombies)
-                     (conj zombies {:p spawn-point
-                                    :cooldown 0
-                                    :seed *seed*})
-                     zombies))))
-
-(defn harm-player [{:keys [hp died] :as player} damage spawn-point]
-  (let [newhp (- hp damage)]
-    (if (< newhp 1)
-      (assoc player
-        :hp 20
-        :p (plus spawn-point [(rand-int 5) (rand-int 5)])
-        :path nil
-        :died (inc died))
-      (assoc player
-        :hp newhp))))
-
-(defstep [zombies players spawn-point]
-  (let [[zmbs pls] (ttmap (fn [zombies [pid {:keys [p] :as player}]]
-                            (let [newzombies (map (fn [{zp :p :keys [cooldown] :as zombie}]
-                                                    (if (and (= 0 cooldown)
-                                                             (< (distance p zp) 1))
-                                                      (assoc zombie
-                                                        :cooldown 10)
-                                                      zombie))
-                                                  zombies)
-                                  damage (count (filter not (map = zombies newzombies)))]
-                              [newzombies
-                               [pid (harm-player player damage spawn-point)]]))
-                          zombies
-                          players)]
-    (assoc state
-      :zombies zmbs
-      :players (into {} pls))))
-
-(defstep [bunnies spawn-point bworld mworld]
+(defstep [bunnies bworld mworld]
   (let [nbs (map (fn [{:keys [p path seed energy] :as bunny}]
                    (assoc (cond (< energy 1)
                                 (assoc bunny :dead true)
@@ -290,12 +44,7 @@
                                 true
                                 bunny)
                      :energy (dec energy)))
-                 (if (and (< (count bunnies) num-bunnies)
-                          (= 0 (mod (prng *seed* 565) 9)))
-                   (conj bunnies {:p spawn-point
-                                  :energy 500
-                                  :seed *seed*})
-                   bunnies))]
+                 bunnies)]
     (let [[nbworld nbs2]
           (ttmap (fn [bworld {:keys [p path] :as bunny}]
                    (if (and (first path)
@@ -315,23 +64,6 @@
       (assoc state
         :bworld nbworld
         :bunnies (vec nbs3)))))
-
-(defn process-bullets [{:keys [bullets bullet-speed] :as state} key]
-  (step-bullets&entities (fn [entity damage]
-                           (if (< 0 damage)
-                             (assoc entity
-                               :dead true)
-                             entity))
-                         :p
-                         bullet-speed
-                         bullets
-                         (state key)))
-
-(defstep [bullets bullet-speed zombies]
-  (let [[bus zmbs] (process-bullets state :zombies)]
-    (assoc state
-      :bullets bus
-      :zombies (vec (filter #(not (:dead %)) zmbs)))))
 
 (defstep [bullets deadbunnies bunnies bullet-speed]
   (let [[bus bns] (process-bullets state :bunnies)]
@@ -519,14 +251,12 @@
         no-shrub (fn []
                    (let [ns2 (frequencies (map #(get-in-map mw %)
                                                (far-ngbrs p 2 mw)))]
-                     (and (:shrub ns2)
-                          (< 5 (:shrub ns2))
+                     (and (< 5 (+ (or (:shrub ns2) 0) (or (:shrub-pear ns2) 0)))
                           (not= 0 (mod (prng p) 3)))))
-        res (cond (and (= :tree mtile) (:tree mns))
-                  [(rand-int 999) btile nil]
-                  (and (= :shrub mtile)
-                       (or (:tree mns)
-                           (no-shrub)))
+        res (cond (or (#{:tree :wall :windowed-wall :door :campfire-on :chest} mtile)
+                      (and (#{:shrub :shrub-pear} mtile)
+                           (or (:tree mns)
+                               (no-shrub))))
                   [(rand-int 999) btile nil]
                   (and (= :dirt btile) (:tree mns))
                   [nil btile mtile]
@@ -536,8 +266,11 @@
                   [(rand-int 999) :dirt mtile]
                   (= :grass btile)
                   [(rand-int 99999) :tall-grass mtile]
-                  (and (= :tall-grass btile) (not mtile) (:shrub mns) (not (no-shrub)))
-                  [(rand-int 99999) btile :shrub])]
+                  (and (= :tall-grass btile) (not mtile) (or (:shrub mns) (:shrub-pear mns))
+                       (not (no-shrub)))
+                  [(rand-int 99999) btile :shrub]
+                  (= :shrub mtile)
+                  [(rand-int 99999) btile :shrub-pear])]
     (if (or (not res) (and (= (nth res 1) btile) (= (nth res 2) mtile)))
       [nil btile mtile]
       res)))
@@ -598,4 +331,4 @@
   (reduce (fn [st f]
             (f st))
           (exec-messages state msgs)
-          step-fns))
+          @step-fns))

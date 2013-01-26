@@ -17,6 +17,11 @@
     [(first (last foo))
      (map second (rest foo))]))
 
+(defmacro dounroll [[n xs] & body]
+  (cons 'do (for [x xs]
+              `(let [~n ~x]
+                 ~@body))))
+
 (defn assoc-seq [col & keys-vals]
   (let [keys (butlast keys-vals)
         vals (last keys-vals)]

@@ -2,7 +2,7 @@
   (:gen-class)
   (:use [seesaw core]
         [clojure.java io]
-        [jardingaard util shared reducers rules])
+        [jardingaard util shared reducers rules helpers])
   (:import [java.net Socket]
            [java.util Date]
            [java.io OutputStreamWriter InputStreamReader BufferedWriter BufferedReader]
@@ -23,18 +23,22 @@
 (def tsz 32)
 
 (defn add-rect! [^FloatBuffer buf [p0 p1] [s0 s1]]
-  (doseq [n [p0 p1
-             p0 (+ p1 s1)
-             (+ p0 s0) (+ p1 s1)
-             (+ p0 s0) p1]]
-    (.put buf (float n))))
+  (let [p0 (float p0)
+        p1 (float p1)
+        s0 (float s0)
+        s1 (float s1)]
+    (dounroll [n [p0 p1
+                  p0 (+ p1 s1)
+                  (+ p0 s0) (+ p1 s1)
+                  (+ p0 s0) p1]]
+      (.put buf (float n)))))
 
 (defn add-tex-coords! [^FloatBuffer buf]
-  (doseq [^Float f [0.0 1.0
-                    0.0 0.0
-                    1.0 0.0
-                    1.0 1.0]]
-    (.put buf f)))
+  (dounroll [f [0.0 1.0
+                0.0 0.0
+                1.0 0.0
+                1.0 1.0]]
+    (.put buf (float f))))
   
 (defn draw-string! [^TextRenderer rnd ^String s [p0 p1] [s0 s1]]
   (.draw rnd s (int p0) (int (- s1 p1))))
@@ -104,20 +108,8 @@
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MIN_FILTER GL2/GL_NEAREST)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MAG_FILTER GL2/GL_NEAREST))
 
-#_(defn tile-groups [world pfoo [s0 s1]]
-  (group-by #(get-in-map world %)
-            (for [p0 (range (max 0 (- (first pfoo) s0))
-                            (min (count world) (+ (first pfoo) s0)))
-                  p1 (range (max 0 (- (second pfoo) s1))
-                            (min (count world) (+ (second pfoo) s1)))]
-              [p0 p1])))
-
-(defn tile-groups [world pfoo [s0 s1]]
-  (group-by #(get-in-map world %)
-            (product (rrange (max 0 (- (first pfoo) s0))
-                             (+ (first pfoo) s0))
-                     (rrange (max 0 (- (second pfoo) s1))
-                             (+ (second pfoo) s1)))))
+(defn tile-groups [world p s]
+  (group-by #(nth % 2) (map-part world (minus p s) (mult s 2))))
 
 (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer 0))
 (def ^FloatBuffer texc-buf (Buffers/newDirectFloatBuffer 0))
@@ -353,7 +345,7 @@
                                                    false "png")])
                           ['grass 'tall-grass 'dirt 'shrub 'door 'wall 'windowed-wall 'tree
                            'twig 'gun 'pickaxe 'tree-crown 'water 'sand 'steak 'steak-fried
-                           'thread 'fur
+                           'thread 'fur 'axe 'chest 'shrub-pear 'granite 'granite-floor
                            'rock 'stone 'spear 'campfire-on 'campfire-off 'campfire-empty
                            'bunny 'deadbunny 'zombie 'player 'trunk 'hands]))))
 

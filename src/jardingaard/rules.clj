@@ -2,7 +2,7 @@
 
 (def world-size (* 32 10))
 
-(def num-zombies 0)
+(def num-zombies 10)
 (def num-bunnies 2)
 
 (def human-walk-speeds {:dirt 1
@@ -12,18 +12,14 @@
                         :sand 1.3
                         :tall-grass 1.3})
 
-(def zombie-walk-speeds (into {} (map (fn [[k v]]
-                                        [k (if (= k :door)
-                                             (* 16 v)
-                                             (* 4 v))])
-                                      human-walk-speeds)))
-
 (def placable [:wall :windowed-wall :door :rock])
 
 (def places [:dirt :grass :tall-grass])
 
 (def interactions (into {[:hands :shrub] {:give {:twig 3}
                                           :tile nil}
+                         [:hands :shrub-pear] {:give {:pear 13}
+                                               :tile :shrub}
                          [:hands :rock] {:give {:stone 1}
                                          :tile :rock}
                          [:stone nil] {:take {:stone 9}
@@ -34,8 +30,12 @@
                          [:steak :campfire-on] {:take {:steak 1}
                                                 :give {:steak-fried 1}
                                                 :tile :campfire-on}
+                         [:pickaxe :granite] {:give {:rock 2}
+                                              :tile nil}
                          [:pickaxe :shrub] {:give {:twig 4}
                                             :tile nil}
+                         [:pickaxe :shrub-pear] {:give {:twig 4}
+                                                 :tile nil}
                          [:pickaxe :tree] {:give {:twig 23
                                                   :trunk 1}
                                            :tile nil}}
@@ -49,8 +49,11 @@
 (def recipes {[:windowed-wall] {:wall 1
                                 :twig 5}
               [:door] {:twig 13}
+              [:chest] {:trunk 1}
               [:pickaxe] {:stone 2
                           :twig 3}
+              [:axe] {:stone 3
+                      :twig 2}
               [:spear] {:stone 1
                         :twig 2}
               [:wall] {:rock 1}
