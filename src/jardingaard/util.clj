@@ -5,10 +5,28 @@
 
 (def tau (* 2 Math/PI))
 
+(defmacro key-> [coll key & forms]
+  `(let [coll# ~coll
+         key# ~key]
+     (assoc coll# key# (-> (get coll# key#) ~@forms))))
+
+(defmacro key->> [coll key & forms]
+  `(key-> ~coll ~key (->> ~@forms)))
+
+(defn swap-args [f]
+  (fn [a b]
+    (f b a)))
+
 (defn mapmap [f m]
   (map (fn [[key value]]
 	 [key (f key value)])
        m))
+
+(defn map-kv [f coll]
+  (persistent! (reduce-kv (fn [acc key value]
+                            (assoc! acc key (f key value)))
+                          (transient (empty coll))
+                          coll)))
 
 (defn ttmap [f y xs]
   (let [foo (reductions (fn [[y _] x]

@@ -1,8 +1,8 @@
 (ns jardingaard.worldgen
-  (:use [jardingaard helpers util]))
+  (:use [jardingaard helpers reducers util]))
 
 (defn tile-type [xs] ;[height vegetation]
-  (let [ys (map #(int (* 5 %)) xs)]
+  (let [ys (map #(int (* 4.99 %)) xs)]
     [(get-in [[:water :water :water      :water      :water]
               [:sand  :dirt  :grass      :tall-grass :dirt]
               [:dirt  :grass :tall-grass :tall-grass :dirt]
@@ -15,6 +15,35 @@
               [:rock    :rock    nil      :rock       :rock]
               [:granite :granite :granite :granite    :granite]]
              ys)]))
+
+(defn quux [x]
+  (- (* 3 (Math/pow x 2)) (* 2 (Math/pow x 3))))
+
+(defn gen-world2 [world-size]
+  (let [feature-size 24
+        mchunk (mapv (fn [_] (vec (range 32)))
+                     (range 32))
+        empty-world (into {} (for [p0 (range 0 world-size 32)
+                                   p1 (range 0 world-size 32)]
+                               [[p0 p1] mchunk]))
+        foo (vec (for [i0 (range 0 (+ world-size feature-size) feature-size)]
+                   (vec (for [i1 (range 0 (+ world-size feature-size) feature-size)]
+                          [(quux (quux (rand))) (rand-int 2)]))))]
+    (reduce (fn [[bworld mworld] p]
+              (let [fp (map int (div p feature-size))
+                    [bla0 bla1] (div (map #(rem % feature-size) p) feature-size)
+                    bar (reduce plus (map (fn [[weight i]]
+                                            (mult (get-in foo i) weight))
+                                          [[(* bla0 bla1) (plus fp [1 1])]
+                                           [(* (- 1 bla0) bla1) (plus fp [0 1])]
+                                           [(* bla0 (- 1 bla1)) (plus fp [1 0])]
+                                           [(* (- 1 bla0) (- 1 bla1)) (plus fp [0 0])]]))
+                    [b m] (tile-type (map #(min 1 (max 0 (+ % (rand 0.1) -0.05))) bar))]
+                [(assoc-in-map bworld p b)
+                 (assoc-in-map mworld p m)]))
+            [empty-world empty-world]
+            (product (rrange world-size)
+                     (rrange world-size)))))
 
 (defn gen-world [world-size]
   (let [mchunk (mapv (fn [_] (vec (range 32)))
@@ -58,8 +87,8 @@
                       :c-sites []
                       :bunnies []
                       :deadbunnies []
-                      :bullet-speed bullet-speed
+                      :chests {}                      :bullet-speed bullet-speed
                       :spawn-point [(/ world-size 2) (/ world-size 2)]}
                      :bworld :mworld
-                     (gen-world world-size))
+                     (gen-world2 world-size))
           @gen-fns))

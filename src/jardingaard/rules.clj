@@ -2,6 +2,8 @@
 
 (def world-size (* 32 10))
 
+(def bullet-speed 1)
+
 (def num-zombies 10)
 (def num-bunnies 2)
 
@@ -10,11 +12,12 @@
                         :grass 1.1
                         :water 1.7
                         :sand 1.3
+                        :granite-floor 1
                         :tall-grass 1.3})
 
-(def placable [:wall :windowed-wall :door :rock])
+(def placable [:wall :windowed-wall :door :rock :chest])
 
-(def places [:dirt :grass :tall-grass])
+;(def places [:dirt :grass :tall-grass])
 
 (def interactions (into {[:hands :shrub] {:give {:twig 3}
                                           :tile nil}

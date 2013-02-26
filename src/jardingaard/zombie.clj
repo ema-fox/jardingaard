@@ -12,37 +12,43 @@
                        (assoc state
                          :zombies []))))
 
-(defstep [zombies players spawn-point bworld mworld]
-  (assoc state
-    :zombies (mapv (fn [{:keys [p path seed cooldown] :as zombie}]
-                     (assoc (if (and (seq path)
-                                     (< 0.1 (distance (last path) p)))
-                              (new-pos zombie zombie-walk-speeds bworld)
-                              (if-let [goal (and (= 0 (mod (prng *seed* seed (round p)) 9))
-                                                 (some (fn [[_ {pp :p}]]
-                                                         (if (< (distance p pp) 20)
-                                                           pp))
-                                                       players))]
-                                (assoc zombie
-                                  :path (route (round p) (round goal) zombie-walk-speeds mworld))
-                                zombie))
-                       :cooldown (max 0 (dec cooldown))))
-                   (if (< (count zombies) num-zombies)
-                     (conj zombies {:p spawn-point
-                                    :cooldown 0
-                                    :seed *seed*})
-                     zombies))))
+(defstep [spawn-point]
+  (key-> state :zombies (as-> zs (cond-> zs
+                                         (< (count zs) num-zombies)
+                                         (conj {:p spawn-point
+                                                :cooldown 0
+                                                :seed *seed*})))))
+
+(defstep [players bworld mworld]
+  (key->> state :zombies
+          (map (fn [{:keys [p path seed cooldown] :as zombie}]
+                 (if (and (seq path)
+                          (< 0.1 (distance (last path) p)))
+                   (new-pos zombie zombie-walk-speeds bworld)
+                   (let [goal (and (= 0 (mod (prng *seed* seed (round p)) 9))
+                                   (some (fn [[_ {pp :p}]]
+                                           (if (< (distance p pp) 20)
+                                             pp))
+                                         players))]
+                     (cond-> zombie
+                             goal
+                             (assoc :path (route (round p) (round goal)
+                                                 zombie-walk-speeds mworld)))))))))
+
+(defstep []
+  (key->> state :zombies
+          (map (fn [{:keys [cooldown] :as zombie}]
+                 (assoc zombie :cooldown (max 0 (dec cooldown)))))))
 
 (defstep [zombies players spawn-point]
   (let [[zmbs pls] (ttmap (fn [zombies [pid {:keys [p] :as player}]]
                             (let [newzombies (map (fn [{zp :p :keys [cooldown] :as zombie}]
-                                                    (if (and (= 0 cooldown)
-                                                             (< (distance p zp) 1))
-                                                      (assoc zombie
-                                                        :cooldown 10)
-                                                      zombie))
+                                                    (cond-> zombie
+                                                            (and (= 0 cooldown)
+                                                                 (< (distance p zp) 1))
+                                                            (assoc :cooldown 10)))
                                                   zombies)
-                                  damage (count (filter not (map = zombies newzombies)))]
+                                  damage (* 10 (count (filter not (map = zombies newzombies))))]
                               [newzombies
                                [pid (harm-player player damage spawn-point)]]))
                           zombies

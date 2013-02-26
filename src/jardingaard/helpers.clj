@@ -247,7 +247,7 @@
   (let [newhp (- hp damage)]
     (if (< newhp 1)
       (assoc player
-        :hp 20
+        :hp 200
         :p (plus spawn-point [(rand-int 5) (rand-int 5)])
         :path nil
         :died (inc died))
