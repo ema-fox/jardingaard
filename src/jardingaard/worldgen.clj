@@ -3,7 +3,8 @@
 
 (defn tile-type [xs] ;[height vegetation]
   (let [ys (map #(int (* 4.99 %)) xs)]
-    [(get-in [[:water :water :water      :water      :water]
+    [:tall-grass nil]
+    #_[(get-in [[:water :water :water      :water      :water]
               [:sand  :dirt  :grass      :tall-grass :dirt]
               [:dirt  :grass :tall-grass :tall-grass :dirt]
               [:granite-floor :dirt          :grass  :tall-grass :dirt]

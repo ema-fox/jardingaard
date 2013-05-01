@@ -1,5 +1,8 @@
 (ns jardingaard.backend
-  (:use [jardingaard worldgen shared helpers util rules]))
+  (:refer-clojure :exclude [read read-string])
+  (:use [clojure.java io]
+        clojure.edn
+        [jardingaard worldgen shared helpers util rules]))
 
 (def maxpid (ref 0))
 
@@ -31,16 +34,22 @@
                                         [5 5]))
                 p]))))
 
-(defn ensure-bunnies [{:keys [bunnies spawn-point] :as state}]
+(def bunny-stats (writer (file "bunny-stats")))
+(def tiles-stats (writer (file "tiles-stats")))
+
+(defn ensure-bunnies [{:keys [bunnies] :as state}]
   (if (and (< (count bunnies) num-bunnies)
            (= 0 (mod (prng *seed* 565) 9)))
     (assoc state
-      :bunnies (conj bunnies {:p spawn-point
-                              :energy 500
+      :bunnies (conj bunnies {:p (rand-spawnpoint state)
+                              :energy 5000
                               :seed *seed*}))
     state))
 
 (defn step! []
+  (if (= 0 (mod (first @state) 300))
+    (binding [*out* bunny-stats]
+      (println (apply + (map :energy (get-in @state [1 :bunnies]))))))
   (let [switch-t (+ (first @state) 100)]
     (alter messages update-in [switch-t] concat (@future-messages switch-t))
     (alter future-messages dissoc switch-t))
@@ -49,13 +58,24 @@
                    [(inc c)
                     (binding [*seed* c]
                       (ensure-bunnies (step state (@messages c))))]))
-    (tiles-delay (apply concat (for [[chunkp offsets] (mapcat #(gen-patch (get-in old-state [1 %])
-                                                                          (get-in @state [1 %]))
-                                                              [:bworld :mworld])
-                                     [o0 o1s] offsets
-                                     [o1 _] o1s
-                                     :let [p (plus chunkp [o0 o1])]]
-                                 (conj (ngbrs p (get-in @state [1 :bworld])) p)))))
+    (let [changed-tiles (apply concat (for [[chunkp offsets] (mapcat #(gen-patch (get-in old-state [1 %])
+                                                                                 (get-in @state [1 %]))
+                                                                     [:bworld :mworld])
+                                            [o0 o1s] offsets
+                                            [o1 _] o1s
+                                            :let [p (plus chunkp [o0 o1])]]
+                                        (conj (ngbrs p (get-in @state [1 :bworld])) p)))]
+      (tiles-delay changed-tiles)
+      (if (= 0 (mod (first @state) 300))
+        (binding [*out* tiles-stats]
+          (println (first (reduce (fn [[counter foo] [t p]]
+                                    (if (= t :tile)
+                                      (if (get foo p)
+                                        [(inc counter) foo]
+                                        [counter (conj foo p)])
+                                      [counter foo]))
+                                  [0 #{}]
+                                  (mapcat val (concat @messages @future-messages)))))))))
   (ref-set messages (into {} (filter #(<= (first @state)
                                           (first %))
                                      @messages))))

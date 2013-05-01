@@ -115,10 +115,7 @@
             (rest xline))))
 
 (defn new-pos [{:keys [p path] :as entity} walk-speeds bworld]
-  (let [npath (if (and (first path)
-                       (< (distance p (first path)) 0.1))
-                (rest path)
-                path)]
+  (let [npath (drop-while #(< (distance p %) 0.1))]
     (assoc (if (first npath)
              (assoc entity
                :p (plus p (mult (direction p (first npath))
@@ -129,6 +126,9 @@
                                      (distance p (first npath))))))
              entity)
       :path npath)))
+
+(defn walking? [{:keys [p path]}]
+  (and (seq path) (< 0.1 (distance (last path) p))))
 
 (defn manhatten [[a0 a1] [b0 b1]]
   (+ (Math/abs (int (- a0 b0)))
@@ -228,6 +228,13 @@
                  (not swapped)
                  (conj closed endp))))
       nil)))
+
+(defn rand-spawnpoint [{:keys [bworld mworld spawn-point]}]
+  (first (concat (filter #(and (not (get-in-map mworld %))
+                               (= :tall-grass (get-in-map bworld %)))
+                         (for [_ (range 50)]
+                           (map rand-int spawn-point)))
+                 [spawn-point])))
 
 (defn step-bullets&entities [f pf bullet-speed bus entities]
   (ttmap (fn [bullets entity]

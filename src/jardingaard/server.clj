@@ -1,10 +1,11 @@
 (ns jardingaard.server
+  (:refer-clojure :exclude [read read-string])
   (:use [jardingaard util shared reducers rules helpers backend]
+        clojure.edn
         clojure.java.io)
   (:import [java.net ServerSocket Socket]
-           [java.util Date]
-           [java.io OutputStreamWriter InputStreamReader BufferedWriter BufferedReader]
-           [clojure.lang LineNumberingPushbackReader]))
+           [java.io OutputStreamWriter BufferedWriter]
+           [java.util Date]))
 
 (set! *warn-on-reflection* true)
 (set! *assert* true)
@@ -121,22 +122,12 @@
            (recur)))
        (update-clients)
        (update-messages!)))))
-  
+
 (defn listen [conn]
-  (let [r (LineNumberingPushbackReader. (BufferedReader. (InputStreamReader. (.getInputStream ^Socket @conn))))
-        eof (Object.)
-        pid (@conns conn)]
-    (loop []
-      (if (let [m (try
-                    (read r false eof)
-                    (catch clojure.lang.LispReader$ReaderException e
-                      (purge-conn conn)
-                      eof))]
-            (if (= m eof)
-              false
-              (do (process-msg m pid conn)
-                  true)))
-        (recur)))))
+  (let [pid (@conns conn)]
+    (doseq [m (reads-socket @conn)]
+      (process-msg m pid conn)))
+  (purge-conn conn))
 
 (defn accept []
   (loop []

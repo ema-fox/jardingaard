@@ -1,6 +1,8 @@
 (ns jardingaard.client
   (:gen-class)
-  (:use [seesaw core]
+  (:refer-clojure :exclude [read read-string])
+  (:use clojure.edn
+        [seesaw core]
         [jardingaard util shared reducers rules helpers gui])
   (:import [java.net Socket]
            [java.io OutputStreamWriter InputStreamReader BufferedWriter BufferedReader]
@@ -97,14 +99,8 @@
                             (msg (conj d (or @fr-counter (second d)))))))))
 
 (defn handle-msgs []
-  (let [r (LineNumberingPushbackReader. (BufferedReader. (InputStreamReader. (.getInputStream conn))))]
-    (loop []
-      (try
-        (handle-msg (read r))
-        (catch clojure.lang.LispReader$ReaderException e
-          (prn e)
-          (connection-lost!)))
-      (recur))))
+  (dorun (map handle-msg (reads-socket conn)))
+  (connection-lost!))
   
 (defn -main [& [^String host]]
   (def conn (loop []

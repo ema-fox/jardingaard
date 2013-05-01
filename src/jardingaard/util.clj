@@ -1,7 +1,12 @@
 (ns jardingaard.util
+  (:refer-clojure :exclude [read read-string])
   (:use [clojure.set :only [union]]
         [clojure.core.reducers :only [cat]]
-        jardingaard.reducers))
+        jardingaard.reducers)
+  (:import [java.net Socket]
+           [java.io InputStreamReader BufferedReader]
+           [clojure.lang LineNumberingPushbackReader]))
+
 
 (def tau (* 2 Math/PI))
 
@@ -44,6 +49,11 @@
   (let [keys (butlast keys-vals)
         vals (last keys-vals)]
     (into col (map vector keys vals))))
+
+(defn index-by (f xs)
+  (first (keep-indexed (fn [i x]
+                         (if (f x)
+                           i)))))
 
 (defn insert-at [i xs x]
   (concat (take i xs) [x] (drop i xs)))
@@ -214,6 +224,29 @@
                     (assoc b k (apply-patch (a k) v))))
                 a
                 p)))
+
+(defmacro simple-catch [maythrow & clauses]
+  `(try
+     ~maythrow
+     ~@(map #(cons 'catch %) clauses)))
+
+(defmacro simple-finally [maythrow & body]
+  `(try
+     ~maythrow
+     (finally
+      ~@body)))
+
+(defn reads-socket [^Socket sock]
+  (let [r (-> sock
+              .getInputStream
+              InputStreamReader.
+              BufferedReader.
+              LineNumberingPushbackReader.)
+        eof (Object.)]
+    ((fn read-socket []
+       (lazy-seq (try
+                   (cons (read r) (read-socket))
+                   (catch clojure.lang.EdnReader$ReaderException e)))))))
 
 (declare pr-summary)
 

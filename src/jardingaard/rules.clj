@@ -1,6 +1,6 @@
 (ns jardingaard.rules)
 
-(def world-size (* 32 10))
+(def world-size (* 32 3))
 
 (def bullet-speed 1)
 

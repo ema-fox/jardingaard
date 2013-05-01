@@ -20,7 +20,7 @@
           (filter #(< 0 (:ttl %)))))
 
 (defn far-ngbrs [[p0 p1 :as p] d w]
-  (filter #(and (not= p%)
+  (filter #(and (not= p %)
                 (get-in-map w %))
           (for [a0 (range (- p0 d) (+ 1 p0 d))
                 a1 (range (- p1 d) (+ 1 p1 d))]
@@ -32,8 +32,7 @@
                      (cond-> (assoc bunny :energy (dec energy))
                              (< energy 1)
                              (assoc :dead true)
-                             (and (first path)
-                                  (< 0.1 (distance (last path) p)))
+                             (first path)
                              (new-pos human-walk-speeds bworld)
                              (and (not (first path))
                                   (= 0 (mod (prng *seed* seed (round p)) 9)))
@@ -42,15 +41,15 @@
                                          foo1 (mod (prng *seed* seed 1234 (round p)) 11)
                                          goal (round (plus p (minus [foo0 foo1] [5 5])))]
                                      (assoc bunny
-                                       :path (if (= :tall-grass (get-in-map bworld goal))
+                                       :path (if (and (not (get-in-map mworld goal))
+                                                      (= :tall-grass (get-in-map bworld goal)))
                                                (route (round p) goal
                                                       human-walk-speeds mworld))))))))))
 
 (defstep [bunnies bworld]
   (let [[nbworld nbs]
         (ttmap (fn [bworld {:keys [p path] :as bunny}]
-                 (if (and (first path)
-                          (< (distance (last path) p) 0.1)
+                 (if (and (not (first path))
                           (= :tall-grass (get-in-map bworld (round p))))
                    [(assoc-in-map bworld (round p) :grass)
                     (update-in bunny [:energy] (partial + 200))]
@@ -64,7 +63,7 @@
 (defstep []
   (key->> state :bunnies
           (mapcat (fn [{:keys [energy seed] :as bunny}]
-                    (if (< energy 50000)
+                    (if (< energy 10000)
                       [bunny]
                       [(assoc bunny :energy 2500)
                        (assoc bunny :energy 2500 :seed (+ *seed* seed))])))))
@@ -134,6 +133,7 @@
       state)))
 
 (defn sub-items [items x n]
+  ;(if-let [i (index-by #(= x (first %)) items)]
   (vec (keep (fn [y]
                (if (not= x (first y))
                  y

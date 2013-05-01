@@ -158,7 +158,7 @@
           (fill-rects! gl (for [{p :p} bullets]
                             [(plus [12 12] (mult p tsz)) [5 5]])))
         (.glTranslatef gl (- 0 (first offset)) (- 0 (second offset)) 0)
-        (let [{:keys [inventar inventar-p inventar-category-p path open-chest hp energy]}
+        (let [{:keys [inventar inventar-p inventar-category-p path open-chest hp energy p]}
               (players @hello)
               ninventar (count inventar)
               pa [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
@@ -173,8 +173,8 @@
           (set-color! gl 150 120 15)
           (fill-rects! gl [[[20 mid1] [20 energy]]])
           (set-color! gl 220 180 20)
-          (fill-rects! gl (for [p path]
-                            [(plus (mult p tsz) [14 14]) [4 4]]))
+          (fill-rects! gl (for [pp path]
+                            [(plus (mult (minus pp p) tsz) [14 14]) [4 4]]))
           (set-color! gl 20 40 10)
           (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
                                 (if @build-index
