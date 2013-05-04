@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [read read-string])
   (:use [clojure.set :only [union]]
         [clojure.core.reducers :only [cat]]
+        clojure.edn
         jardingaard.reducers)
   (:import [java.net Socket]
            [java.io InputStreamReader BufferedReader]
@@ -50,7 +51,7 @@
         vals (last keys-vals)]
     (into col (map vector keys vals))))
 
-(defn index-by (f xs)
+(defn index-by [f xs]
   (first (keep-indexed (fn [i x]
                          (if (f x)
                            i)))))
