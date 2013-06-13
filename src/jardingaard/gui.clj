@@ -117,6 +117,16 @@
         (.glVertexPointer gl 2 GL2/GL_FLOAT 0 vert-buf)
         (.glDrawArrays gl GL2/GL_QUADS 0 nverts)))))
 
+(defn draw-lines! [^GL2 gl ps]
+  (if (< 1 (count ps))
+    (let [vbuf (Buffers/newDirectFloatBuffer (* 2 (count ps)))]
+      (doseq [[p0 p1] ps]
+        (.put vbuf (float p0))
+        (.put vbuf (float p1)))
+      (.flip vbuf)
+      (.glVertexPointer gl 2 GL2/GL_FLOAT 0 vbuf)
+      (.glDrawArrays gl GL2/GL_LINE_STRIP 0 (count ps)))))
+
 (defn render [^GL2 gl size]
   (dosync
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
@@ -173,8 +183,9 @@
           (set-color! gl 150 120 15)
           (fill-rects! gl [[[20 mid1] [20 energy]]])
           (set-color! gl 220 180 20)
-          (fill-rects! gl (for [pp path]
-                            [(plus (mult (minus pp p) tsz) [14 14]) [4 4]]))
+          (draw-lines! gl (for [pp (cons p path)]
+                            (plus (plus (mult (minus pp p) tsz) [14 14])
+                                   [(/ (first size) 2) (/ (second size) 2)])))
           (set-color! gl 20 40 10)
           (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
                                 (if @build-index
@@ -323,6 +334,7 @@
                                  (load-textures! class-loader)
                                  (def rnd (TextRenderer. (Font. "SansSerif" Font/PLAIN 12)))
                                  (let [gl (.getGL2 (.getGL d))]
+                                   (.glDisable gl GL/GL_DEPTH_TEST)
                                    (.glEnable gl GL/GL_BLEND)
                                    (.glBlendFunc gl GL/GL_SRC_ALPHA GL/GL_ONE_MINUS_SRC_ALPHA)))
                                (display [^GLAutoDrawable d]

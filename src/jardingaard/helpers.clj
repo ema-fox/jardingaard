@@ -115,7 +115,7 @@
             (rest xline))))
 
 (defn new-pos [{:keys [p path] :as entity} walk-speeds bworld]
-  (let [npath (drop-while #(< (distance p %) 0.1))]
+  (let [npath (drop-while #(< (distance p %) 0.1) path)]
     (assoc (if (first npath)
              (assoc entity
                :p (plus p (mult (direction p (first npath))
@@ -146,7 +146,7 @@
 
 (defrecord path-stub [ps d h])
 
-(def directions (apply concat (take 4 (iterate #(map (fn [[p0 p1]]
+#_(def directions (apply concat (take 4 (iterate #(map (fn [[p0 p1]]
                                                        [p1 (* -1 p0)])
                                                      %)
                                                [[1 0]
@@ -157,6 +157,11 @@
                                                 [1 3]
                                                 [3 2]
                                                 [2 3]]))))
+
+(def directions (filter #(not= [0 0] %)
+                        (for [p0 (range -3 4)
+                              p1 (range -3 4)]
+                          [p0 p1])))
 
 (def tdstore (into {} (map (fn [d]
                              [d (disj (set (line-affects [0 0] d))

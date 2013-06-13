@@ -287,3 +287,19 @@
            (let [out (str x)]
              (print out)
              (- n (count out))))))
+
+(defn progress [xs]
+  (count (filter #(realized? %) xs)))
+
+(defn pbar [xs]
+  (let [c (count xs)]
+    (println (apply str (repeat c "-")))
+    (loop [before 0]
+      (let [cc (progress xs)]
+        (when (< before cc)
+          (print (apply str (repeat (- cc before) ".")))
+          (flush))
+        (when-not (= c cc)
+          (Thread/sleep 100)
+          (recur cc))))))
+          

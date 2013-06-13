@@ -10,9 +10,9 @@
                  (let [newp (plus p (mult m bullet-speed))]
                    (assoc b
                      :p newp
-                     :ttl (if (some #((if (> ttl 495)
-                                        #{:wall :door :tree :granite}
-                                        #{:wall :door :tree :granite :windowed-wall})
+                     :ttl (if (some #((cond-> #{:wall :door :tree :granite}
+                                              (> ttl 495)
+                                              (conj :windowed-wall))
                                       (get-in-map mworld %))
                                     (line-affects p newp))
                             0
