@@ -22,7 +22,8 @@
 (defstep [players bworld mworld]
   (key->> state :zombies
           (map (fn [{:keys [p seed cooldown] :as zombie}]
-                 (if (walking? zombie)
+                 (if (and (walking? zombie) (not= 0 (mod (prng *seed* seed
+                                                               (round p)) 9)))
                    (new-pos zombie zombie-walk-speeds bworld)
                    (let [goal (and (= 0 (mod (prng *seed* seed (round p)) 9))
                                    (some (fn [[_ {pp :p}]]
