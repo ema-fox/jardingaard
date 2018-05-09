@@ -2,5 +2,6 @@
   :description "Jardingaard"
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.clojars.toxi/jogl "2.0.0-rc11"]
-                 [seesaw "1.4.0"]])
+                 [org.jogamp.gluegen/gluegen-rt-main "2.2.4"]
+                 [org.jogamp.jogl/jogl-all-main "2.2.4"]
+                 [seesaw "1.4.4"]])
