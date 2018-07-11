@@ -19,6 +19,14 @@
 (defn quux [x]
   (- (* 3 (Math/pow x 2)) (* 2 (Math/pow x 3))))
 
+(defn gen-world3 [world-size]
+  (let [mchunk (mapv (fn [_] (mapv (fn [_] nil) (range 32)))
+                     (range 32))
+        empty-world (into {} (for [p0 (range 0 world-size 32)
+                                   p1 (range 0 world-size 32)]
+                               [[p0 p1] mchunk]))]
+    [empty-world empty-world]))
+
 (defn gen-world2 [world-size]
   (let [feature-size 24
         mchunk (mapv (fn [_] (vec (range 32)))
@@ -90,5 +98,5 @@
                       :chests {}                      :bullet-speed bullet-speed
                       :spawn-point [(/ world-size 2) (/ world-size 2)]}
                      :bworld :mworld
-                     (gen-world2 world-size))
+                     (gen-world3 world-size))
           @gen-fns))

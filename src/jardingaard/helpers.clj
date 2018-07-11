@@ -57,8 +57,8 @@
   (reify
     CollReduce
     (coll-reduce [_ f val]
-      (let [p0 (int p0)
-            p1 (int p1)
+      (let [p0 (floor2 p0)
+            p1 (floor2 p1)
             s0 (int s0)
             s1 (int s1)
             high-mask (int high-mask)
@@ -80,14 +80,16 @@
                                                             0)
                                                           (if (= hi1 hb1)
                                                             (inc (bit-and (+ p1 s1) low-mask))
-                                                            32)))))
+                                                            32)
+                                                          2))))
                                       val2
                                       (rrange (if (= hi0 ha0)
                                                 (bit-and p0 low-mask)
                                                 0)
                                               (if (= hi0 hb0)
                                                 (inc (bit-and (+ p0 s0) low-mask))
-                                                32)))))
+                                                32)
+                                              2))))
                           val1
                           (range ha1 (+ hb1 32) 32)))
                 val
@@ -114,21 +116,33 @@
             xline
             (rest xline))))
 
-(defn new-pos [{:keys [p path] :as entity} walk-speeds bworld]
-  (let [npath (drop-while #(< (distance p %) 0.1) path)]
-    (assoc (if (first npath)
-             (assoc entity
-               :p (plus p (mult (direction p (first npath))
-                                (min (/ 0.25
-                                        (or (walk-speeds (get-in-map bworld
-                                                                     (round p)))
-                                            1))
-                                     (distance p (first npath))))))
-             entity)
-      :path npath)))
+(defn p->walk-speed [p walk-speeds bworld]
+  (or (walk-speeds (get-in-map bworld p))
+      1))
 
-(defn walking? [{:keys [p path]}]
-  (and (seq path) (< 0.1 (distance (last path) p))))
+(defn new-pos [{:keys [p path] :as entity} walk-speeds bworld]
+  (if (first path)
+    (loop [p p
+           [next-pos & rest-path :as path] path
+           energy 0.01]
+      (if (and next-pos (> energy 0))
+        (let [ws (p->walk-speed (round2 p) walk-speeds bworld)
+              needed-energy (* (distance p next-pos) ws)]
+          (if (> needed-energy energy)
+            (recur (plus p (mult (direction p next-pos)
+                                 (/ energy ws)))
+                   path
+                   0)
+            (recur next-pos
+                   rest-path
+                   (- energy needed-energy))))
+        (assoc entity
+          :p p
+          :path path)))
+    entity))
+
+(defn walking? [{:keys [path]}]
+  (seq path))
 
 (defn manhatten [[a0 a1] [b0 b1]]
   (+ (Math/abs (int (- a0 b0)))
@@ -143,96 +157,53 @@
 (defn ngbrs [p w]
   (filter #(get-in-map w %) (unchecked-ngbrs p)))
 
-
 (defrecord path-stub [ps d h])
 
-#_(def directions (apply concat (take 4 (iterate #(map (fn [[p0 p1]]
-                                                       [p1 (* -1 p0)])
-                                                     %)
-                                               [[1 0]
-                                                [1 1]
-                                                [2 1]
-                                                [1 2]
-                                                [3 1]
-                                                [1 3]
-                                                [3 2]
-                                                [2 3]]))))
+(defn fooneighbors [p]
+  (if (odd? (second p))
+    (map reverse (fooneighbors (reverse p)))
+    (map #(plus % p) [[2 0]
+                      [1 -1]
+                      [-1 -1]
+                      [-2 0]
+                      [-1 1]
+                      [1 1]])))
 
-(def directions (filter #(not= [0 0] %)
-                        (for [p0 (range -3 4)
-                              p1 (range -3 4)]
-                          [p0 p1])))
+(defn barneighbors [p]
+  (map #(plus (round2 p) %) [[-1 0]
+                             [0 1]
+                             [1 0]
+                             [0 -1]]))
 
-(def tdstore (into {} (map (fn [d]
-                             [d (disj (set (line-affects [0 0] d))
-                                      [0 0])])
-                           directions)))
+(defn evaluate2 [[_ a b]] (+ a b))
 
-(def fdstore (into {} (mapmap (fn [_ xs]
-                                (eval `(fn [[^Integer ~'p0 ^Integer ~'p1] ~'w]
-                                         (and ~@(for [[x0 x1] xs]
-                                                  `(walkable? (get-in-map ~'w [(+ ~x0 ~'p0)
-                                                                               (+ ~x1 ~'p1)])))))))
-                              tdstore)))
+(defn evaluate [[_ [_ a b]]] (+ a b))
 
-(defn test-direction [p d w]
-  ((fdstore d) p w))
+(defn candidates [p [ps d h] goal ns p->ws]
+  (into {} (for [n ns]
+             [n [(cons n ps)
+                 (+ d (* (p->ws (round2 (half-point p n)))
+                         (distance p n)))
+                 (distance n goal)]])))
 
-(defn route [start goal walk-speeds mw]
-  {:pre [(every? integer? start)
-         (every? integer? goal)]}
-  (loop [open {start (path-stub. ()
-                                 0
-                                 (manhatten start goal))}
-         other-open {goal (path-stub. (list goal)
-                                      0
-                                      (manhatten start goal))}
-         swapped false
-         closed #{}]
-    (if (first open)
-      (let [[endp {:keys [ps d h]}] (reduce (fn a [[_ {da :d ha :h} :as a] [_ {db :d hb :h} :as b]]
-                                              (if (< (+ da ha) (+ db hb))
-                                                a
-                                                b))
-                                            open)]
-        (if (other-open endp)
-          (let [cp (reduce (fn [a b]
-                             (if (< (+ (:d (open a)) (:d (other-open a)))
-                                    (+ (:d (open b)) (:d (other-open b))))
-                               a
-                               b))
-                           (intersection (set (keys open)) (set (keys other-open))))
-                other-side (other-open cp)]
-            (if swapped
-              (concat (reverse (:ps other-side)) (rest ps))
-              (concat (reverse ps) (rest (:ps other-side)))))
-          (recur other-open
-                 (persistent! (loop [m (dissoc! (transient open) endp)
-                                     [p & newps] (->> directions
-                                                      (keep (fn c [%]
-                                                              (let [p (plus endp %)]
-                                                                (if (and (not (closed p))
-                                                                         (< (manhatten p goal) 30)
-                                                                         (test-direction endp % mw))
-                                                                  p)))))]
-                                (if p
-                                  (let [d (+ (distance endp p) d)
-                                        h (distance p (if swapped
-                                                        start
-                                                        goal))
-                                        a (m p)]
-                                    (recur (if (and a
-                                                    (< (+ (:d a) (:h a))
-                                                       (+ d h)))
-                                             m
-                                             (assoc! m p (path-stub. (conj ps p)
-                                                                     d
-                                                                     h)))
-                                           newps))
-                                  m)))
-                 (not swapped)
-                 (conj closed endp))))
-      nil)))
+(defn route2 [start goal walk-speeds bworld]
+  (let [p->ws (fn [p]
+                (p->walk-speed p walk-speeds bworld))]
+    (loop [open (candidates start [() 0 (distance start goal)] goal (barneighbors start) p->ws)
+           closed #{}]
+      (let [[closest info] (first (sort-by evaluate open))]
+        (reverse (first info))
+        (if ((set (barneighbors (round2 goal))) closest)
+          (reverse (conj (first info) goal))
+          (recur (merge-with (fn [a b]
+                               (if (< (evaluate2 a) (evaluate2 b))
+                                 a
+                                 b))
+                             (dissoc open closest)
+                             (candidates closest info goal (filter (comp not closed)
+                                                                   (fooneighbors closest))
+                                         p->ws))
+                 (conj closed closest)))))))
 
 (defn rand-spawnpoint [{:keys [bworld mworld spawn-point]}]
   (first (concat (filter #(and (not (get-in-map mworld %))

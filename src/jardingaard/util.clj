@@ -91,6 +91,12 @@
   [(floor (+ 0.5 p0))
    (floor (+ 0.5 p1))])
 
+(defn floor2 [x]
+  (* (floor (* x 0.5)) 2))
+
+(defn round2 [p]
+  (mult (round (mult p 0.5)) 2))
+
 (defn mult2 [[pa0 pa1] [pb0 pb1]]
   [(* pa0 pb0) (* pa1 pb1)])
 
@@ -122,6 +128,9 @@
 
 (defn avg-point [pa pb x]
   (plus (mult pa x) (mult pb (- 1 x))))
+
+(defn half-point [pa pb]
+  (avg-point pa pb 0.5))
 
 (defn p-on-line [pa pb pc]
   (let [delta (minus pb pa)
@@ -157,9 +166,10 @@
 (defn alter-in [r key f & args]
   (alter r assoc key (apply f (get @r key) args)))
 
-(defn dbg [x & msg]
-  (prn msg x)
-  x)
+(defmacro dbg [& xs]
+  `(let [res# ~xs]
+     (prn '~xs res#)
+     res#))
 
 (defn loud-agent [& args]
   (apply agent (concat args
@@ -302,4 +312,3 @@
         (when-not (= c cc)
           (Thread/sleep 100)
           (recur cc))))))
-          

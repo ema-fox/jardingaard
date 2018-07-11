@@ -16,7 +16,9 @@
 
 (declare txtr ^TextRenderer rnd)
 
-(def tsz 32)
+(def tsz 128)
+(def dtsz (* tsz 2))
+(def halftsz (/ tsz 2))
 
 (def fr-ts (ref '()))
 
@@ -104,6 +106,10 @@
   (draw-rects! gl tex (for [p tiles]
                         [(mult p tsz) [tsz tsz]])))
 
+(defn draw-double-tiles! [gl tex tiles]
+  (draw-rects! gl tex (for [p tiles]
+                        [(mult (plus p [-0.5 -0.5]) tsz) [dtsz dtsz]])))
+
 (defn fill-rects! [^GL2 gl rects]
   (let [nrects (count rects)]
     (if-not (= 0 nrects)
@@ -134,7 +140,7 @@
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
   (let [{:keys [players bullets world c-sites bworld mworld bunnies deadbunnies zombies chests]} (current-state)]
     (when (get players @hello)
-      (let [pfoo (round (get-in players [@hello :p]))
+      (let [pfoo (round2 (get-in players [@hello :p]))
             offset (minus (mult size 0.5) (mult (get-in players [@hello :p]) tsz))]
         (prepare-gl! gl offset size)
         (set-color! gl 255 255 255)
@@ -146,11 +152,11 @@
           (doseq [[bg tiles] btiles
                   :let [tex (txtr bg)]
                   :when tex]
-            (draw-tiles! gl tex tiles))
+            (draw-double-tiles! gl tex tiles))
           (doseq [[bg tiles] mtiles
                   :let [tex (txtr bg)]
                   :when tex]
-            (draw-tiles! gl tex tiles))
+            (draw-double-tiles! gl tex tiles))
           (draw-tiles! gl (txtr :bunny) (map :p bunnies))
           (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
           (draw-tiles! gl (txtr :zombie) (map :p zombies))
@@ -184,7 +190,7 @@
           (fill-rects! gl [[[20 mid1] [20 energy]]])
           (set-color! gl 220 180 20)
           (draw-lines! gl (for [pp (cons p path)]
-                            (plus (plus (mult (minus pp p) tsz) [14 14])
+                            (plus (plus (mult (minus pp p) tsz) [halftsz halftsz])
                                    [(/ (first size) 2) (/ (second size) 2)])))
           (set-color! gl 20 40 10)
           (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
@@ -282,6 +288,7 @@
     KeyEvent/VK_S (scroll :inc)
     KeyEvent/VK_A (scroll :left)
     KeyEvent/VK_D (scroll :right)
+    KeyEvent/VK_J (add-plcmd [:rotate-tile])
     KeyEvent/VK_TAB (if (get-in (current-state) [:players @hello :open-chest])
                       (add-plcmd [:close-chest])
                       (dosync
@@ -308,7 +315,7 @@
     MouseEvent/BUTTON1
     (add-plcmd [:shot (get-event-p e)])
     MouseEvent/BUTTON3
-    (add-plcmd [:walk (get-event-p e)])
+    (add-plcmd [:walk (dbg get-event-p e)])
     nil))
 
 (defn load-textures! [class-loader]

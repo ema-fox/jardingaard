@@ -1,8 +1,8 @@
 (ns jardingaard.shared
-  (:require [jardingaard zombie])
+  ;(:require [jardingaard zombie])
   (:use [jardingaard util reducers rules helpers]))
 
-(def tick-duration 33)
+(def tick-duration 16)
 
 (defstep [mworld bullet-speed]
   (key->> state :bullets
@@ -25,26 +25,6 @@
           (for [a0 (range (- p0 d) (+ 1 p0 d))
                 a1 (range (- p1 d) (+ 1 p1 d))]
             [a0 a1])))
-
-(defstep [bworld mworld]
-  (key->> state :bunnies
-          (map (fn [{:keys [p path seed energy] :as bunny}]
-                     (cond-> (assoc bunny :energy (dec energy))
-                             (< energy 1)
-                             (assoc :dead true)
-                             (first path)
-                             (new-pos human-walk-speeds bworld)
-                             (and (not (first path))
-                                  (= 0 (mod (prng *seed* seed (round p)) 9)))
-                             (as-> bunny
-                                   (let [foo0 (mod (prng *seed* seed 4321 (round p)) 11)
-                                         foo1 (mod (prng *seed* seed 1234 (round p)) 11)
-                                         goal (round (plus p (minus [foo0 foo1] [5 5])))]
-                                     (assoc bunny
-                                       :path (if (and (not (get-in-map mworld goal))
-                                                      (= :tall-grass (get-in-map bworld goal)))
-                                               (route (round p) goal
-                                                      human-walk-speeds mworld))))))))))
 
 (defstep [bunnies bworld]
   (let [[nbworld nbs]
@@ -103,7 +83,7 @@
       :bullets (vec bus)
       :players (into {} pls))))
 
-(defstep [bworld players]
+#_(defstep [bworld players]
    (assoc state
     :bworld (reduce (fn [bw pl]
                      (let [tilep (round (:p pl))
@@ -118,18 +98,19 @@
                    bworld
                    (vals players))))
 
-(defn walk [{:keys [mworld players] :as state} pid p]
-  (let [goal (->> (line-affects (get-in players [pid :p]) p)
+(defn walk [{:keys [mworld bworld players] :as state} pid p]
+  (let [goal p #_(->> (line-affects (get-in players [pid :p]) p)
                   (sort-by #(distance % p))
                   (drop-while #(not (walkable? (get-in-map mworld %))))
                   first)]
     (if goal
       (let [pp (get-in players [pid :p])
-            path (route (round pp)
-                        (round goal)
+            path (route2 pp
+                        goal
                         human-walk-speeds
-                        mworld)]
-        (assoc-in state [:players pid :path] path))
+                        bworld)
+            path2 (concat (drop-last path) [goal])]
+        (assoc-in state [:players pid :path] path2))
       state)))
 
 (defn sub-items [items x n]
@@ -269,6 +250,19 @@
                                                                              xs)}))
       state)))
 
+(def rotations {nil :grass
+                :grass :dirt
+                :dirt :water
+                :water :tall-grass
+                :tall-grass :grass})
+
+(defn rotate-tile [{:keys [bworld players] :as state} pid]
+  (let [player (players pid)
+        p (round2 (:p player))
+        old (get-in-map bworld p)]
+    (assoc state
+      :bworld (assoc-in-map bworld p (rotations old)))))
+
 (defn move-item [{:keys [chests players] :as state} pid]
   (let [{:keys [inventar inventar-p inventar-category-p open-chest energy] :as player} (get players pid)]
     (if open-chest
@@ -337,7 +331,8 @@
                :close-chest (assoc-in state [:players pid :open-chest] nil)
                :scrollip (update-in state [:players pid] scrollip (second cmd) state)
                :move-item (move-item state pid)
-               :build (build state pid (second cmd))))
+               :build (build state pid (second cmd))
+               :rotate-tile (rotate-tile state pid)))
     :tile (let [[_ btile mtile] (step-tile (second msg) (:bworld state) (:mworld state))]
             (assoc state
               :bworld (assoc-in-map (:bworld state) (second msg) btile)
