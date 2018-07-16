@@ -109,7 +109,7 @@
                (send-client conn [:skew :plus])
                (> (+ (nth m 2) (half-median-ping pid)) @fr-counter)
                (send-client conn [:skew :minus])))
-     :save (spit save-path (second @state))
+     :save (spit save-path @state)
      :name (do (add-player! pid (second m))
                (log [:name (second m) @conn]))
      :cmds

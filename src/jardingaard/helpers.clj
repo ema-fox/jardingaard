@@ -1,5 +1,5 @@
 (ns jardingaard.helpers
-  (:use [jardingaard util reducers]
+  (:use [jardingaard rules util reducers]
         [clojure.set :only [intersection]]
         [clojure.core.protocols]))
 
@@ -23,7 +23,16 @@
                                           (check-players-p ~' %)]}
                                   ~@body))))
 
-(def ^:dynamic *seed*)
+(def ^:dynamic *tick*)
+
+(defn spawn-progress [{:keys [spawn type]}]
+  (min 1 (/ (- *tick* spawn) (work-times type))))
+
+(defn ready?
+  ([spawn ticks]
+   (>= *tick* (+ spawn ticks)))
+  ([object]
+   (= (spawn-progress object) 1)))
 
 (defn walkable? [tt]
   (or (not tt) (= :door tt)))
@@ -117,8 +126,12 @@
             (rest xline))))
 
 (defn p->walk-speed [p walk-speeds bworld]
-  (or (walk-speeds (get-in-map bworld p))
+  (or (walk-speeds (:ground (get-in-map bworld p)))
       1))
+
+(defn make-p->ws [walk-speeds world]
+  (fn [p]
+    (p->walk-speed p walk-speeds world)))
 
 (defn new-pos [{:keys [p path] :as entity} walk-speeds bworld]
   (if (first path)
@@ -186,9 +199,9 @@
                          (distance p n)))
                  (distance n goal)]])))
 
-(defn route2 [start goal walk-speeds bworld]
-  (let [p->ws (fn [p]
-                (p->walk-speed p walk-speeds bworld))]
+(defn route2 [start goal p->ws]
+  (if (= (round2 start) (round2 goal))
+    [goal]
     (loop [open (candidates start [() 0 (distance start goal)] goal (barneighbors start) p->ws)
            closed #{}]
       (let [[closest info] (first (sort-by evaluate open))]
@@ -247,3 +260,6 @@
                          bullet-speed
                          bullets
                          (state key)))
+
+(defn get-map-part [world p s]
+  (map-part world (minus p s) (mult s 2)))

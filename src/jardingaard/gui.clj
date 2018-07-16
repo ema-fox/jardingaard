@@ -20,6 +20,8 @@
 (def dtsz (* tsz 2))
 (def halftsz (/ tsz 2))
 
+(def isz 32)
+
 (def fr-ts (ref '()))
 
 (def hello (ref nil))
@@ -76,8 +78,8 @@
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MIN_FILTER GL2/GL_NEAREST)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MAG_FILTER GL2/GL_NEAREST))
 
-(defn tile-groups [world p s]
-  (group-by #(nth % 2) (map-part world (minus p s) (mult s 2))))
+(defn tile-groups [mp keyfn]
+  (group-by #(keyfn (nth % 2)) mp))
 
 (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer 0))
 (def ^FloatBuffer texc-buf (Buffers/newDirectFloatBuffer 0))
@@ -138,7 +140,8 @@
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
   (.glClearColor gl 0.5 0.5 0.5 1)
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
-  (let [{:keys [players bullets world c-sites bworld mworld bunnies deadbunnies zombies chests]} (current-state)]
+  (let [{:keys [players bullets world c-sites bworld mworld bunnies deadbunnies zombies chests tick lumberjacks]} (current-state)]
+    (binding [*tick* tick]
     (when (get players @hello)
       (let [pfoo (round2 (get-in players [@hello :p]))
             offset (minus (mult size 0.5) (mult (get-in players [@hello :p]) tsz))]
@@ -147,8 +150,9 @@
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [[btiles mtiles] (map #(tile-groups % pfoo (plus [1 1] (round (div size (* tsz 2.0)))))
-                                   [bworld mworld])]
+        (let [mp (get-map-part bworld pfoo (plus [1 1] (round (div size (* tsz 2.0)))))
+              btiles (tile-groups mp :ground)
+              mtiles (tile-groups mp #(:type (:object %)))]
           (doseq [[bg tiles] btiles
                   :let [tex (txtr bg)]
                   :when tex]
@@ -161,13 +165,14 @@
           (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
           (draw-tiles! gl (txtr :zombie) (map :p zombies))
           (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
-          (.glColor4f gl 1.0 1.0 1.0 0.4)
-          (draw-rects! gl (txtr :tree-crown)
-                       (for [p (:tree mtiles)]
-                         [(mult (minus p [2 2]) tsz) (mult [5 5] tsz)]))
+          (draw-tiles! gl (txtr :player) (map :p lumberjacks))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-          (set-color! gl 0 0 0)
+          (set-color! gl 250 220 25)
+          (fill-rects! gl (for [tile (into [] mp)
+                                :let [object (:object (nth tile 2))]
+                                :when object]
+                            [(mult tile tsz) [(* (spawn-progress object) tsz) 5]]))
           (fill-rects! gl (for [{:keys [p t]} c-sites]
                             [(mult p tsz) [(inc (* t 0.3)) 5]]))
           (set-color! gl 0 0 0)
@@ -210,20 +215,20 @@
           (doseq [i (range ninventar)
                   :let [tex (txtr (first (nth inventar i)))]
                   :when tex]
-            (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [tsz tsz]]]))
+            (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [isz isz]]]))
           (if open-chest
             (let [items (map first (get chests open-chest))]
               (doseq [i (range (count items))
                       :let [tex (txtr (nth items i))]
                       :when tex]
-                (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [0 (* i 40)]) [tsz tsz]]]))))
+                (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [0 (* i 40)]) [isz isz]]]))))
           (if @build-index
             (doseq [i (range (count bs))
                     :let [cs (nth bs i)]
                     j (range (count cs))
                     :let [tex (txtr (nth cs j))]
                     :when (and tex (some #(= cs %) (possible-recipes)))]
-              (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [(* j -40) (* i 40)]) [tsz tsz]]])))
+              (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [(* j -40) (* i 40)]) [isz isz]]])))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
@@ -240,11 +245,11 @@
                       :when (< 1 n)]
                 (draw-string! rnd (str n) (plus (plus pa [2 35]) [-40 (* i 40)]) size))))
           (.setColor rnd 0 0 0 1)
-          (doseq [[pid {:keys [p inventar inventar-p died name]}] players]
+          (doseq [[pid {:keys [p died name]}] players]
             (draw-string! rnd (str name " - " died)
                           (plus offset (minus (mult p tsz) [0 20]))
                           size)))
-        (.endRendering rnd))))
+        (.endRendering rnd)))))
   (.beginRendering rnd (first size) (second size))
   (.setColor rnd 1 1 1 1)
   (draw-string! rnd (if (< 2 (count @fr-ts))

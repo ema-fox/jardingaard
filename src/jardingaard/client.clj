@@ -39,7 +39,7 @@
 
 (defn step-to [[start st] end msgs]
   (reduce (fn [sta n]
-            (binding [*seed* n]
+            (binding [*tick* n]
               (step sta (msgs n))))
           st
           (range start end)))

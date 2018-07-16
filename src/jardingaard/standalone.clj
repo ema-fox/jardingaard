@@ -3,7 +3,8 @@
   (:import [java.util Date]))
 
 (defn current-state2 []
-  (second @state))
+  (assoc (second @state)
+    :tick (first @state)))
 
 (defn add-plcmd2 [m]
   (dosync
@@ -17,7 +18,10 @@
             x))
         recipes))
 
-(config-gui current-state2 add-plcmd2 possible-recipes2 #())
+(config-gui current-state2 add-plcmd2 possible-recipes2
+            (fn []
+              (spit save-path @state)
+              (prn "saved")))
 
 (defn steps [can]
   (loop []
@@ -31,9 +35,12 @@
 
 (defn -main [& [sp]]
   (load-world! sp)
-  (let [pid (inc @maxpid)]
+  (if (= 0 @maxpid)
+    (let [pid (inc @maxpid)]
+      (dosync
+       (add-player! pid "foo")
+       (ref-set hello pid)))
     (dosync
-     (add-player! pid "foo")
-     (ref-set hello pid)))
+     (ref-set hello @maxpid)))
   (let [can (create-gui)]
     (steps can)))

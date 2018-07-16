@@ -1,6 +1,12 @@
 (ns jardingaard.rules)
 
-(def world-size (* 32 10))
+(defn seconds [x]
+  (* x 60))
+
+(defn minutes [x]
+  (* (seconds x) 60))
+
+(def world-size (* 32 1))
 
 (def bullet-speed 1)
 
@@ -15,7 +21,12 @@
                         :granite-floor 1
                         :tall-grass 1.3})
 
-(def placable [:wall :windowed-wall :door :rock :chest])
+(def placable #{:wall :windowed-wall :door :rock :chest :tree :lumberjack})
+
+(def work-times {:tree (seconds 9)
+                 :lumberjack (seconds 2)})
+
+(def object-fruits {:tree :wood})
 
 ;(def places [:dirt :grass :tall-grass])
 
@@ -51,6 +62,9 @@
 
 (def recipes {[:windowed-wall] {:wall 1
                                 :twig 5}
+              [:tree] {:gold 3}
+              [:lumberjack] {:gold 5
+                             :wood 3}
               [:door] {:twig 13}
               [:chest] {:trunk 1}
               [:pickaxe] {:stone 2

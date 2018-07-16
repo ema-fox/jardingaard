@@ -46,7 +46,7 @@
                     (if (< energy 10000)
                       [bunny]
                       [(assoc bunny :energy 2500)
-                       (assoc bunny :energy 2500 :seed (+ *seed* seed))])))))
+                       (assoc bunny :energy 2500 :seed (+ *tick* seed))])))))
 
 (defstep [bullets deadbunnies bunnies bullet-speed]
   (let [[bus bns] (process-bullets state :bunnies)]
@@ -71,6 +71,12 @@
     (map-kv (fn [pid player]
               (new-pos player human-walk-speeds bworld)))))
 
+(defstep [bworld lumberjacks]
+  (assoc state
+    :lumberjacks (map (fn [lj]
+                        (new-pos lj human-walk-speeds bworld))
+                      lumberjacks)))
+
 (defstep [bullets players bullet-speed spawn-point]
   (let [[bus pls] (step-bullets&entities
                    (fn [[pid {:keys [hp died] :as player}] damage]
@@ -91,7 +97,7 @@
                                   :grass :dirt}
                                  (get-in-map bw tilep))]
                        (if (and succ
-                                (= 0 (mod (apply bit-xor *seed* tilep)
+                                (= 0 (mod (apply bit-xor *tick* tilep)
                                           9)))
                          (assoc-in-map bw tilep succ)
                          bw)))
@@ -105,12 +111,8 @@
                   first)]
     (if goal
       (let [pp (get-in players [pid :p])
-            path (route2 pp
-                        goal
-                        human-walk-speeds
-                        bworld)
-            path2 (concat (drop-last path) [goal])]
-        (assoc-in state [:players pid :path] path2))
+            path (route2 pp goal (make-p->ws human-walk-speeds bworld))]
+        (assoc-in state [:players pid :path] path))
       state)))
 
 (defn sub-items [items x n]
@@ -137,10 +139,15 @@
       :inventar new-inventar
       :inventar-p (min inventar-p (dec (count new-inventar))))))
 
+(defn give-player [player x n]
+  (key-> player :inventar (add-items x n)))
+
 (defn shot [state pid goalp]
   (let [{:keys [p inventar inventar-p]} (get-in state [:players pid])
         selected (first (nth inventar inventar-p))
-        tilep (round goalp)]
+        tilep (round2 goalp)
+        tile (get-in-map (:bworld state) tilep)
+        object (:object tile)]
     (cond (= :gun selected)
           (update-in state [:bullets] conj (let [m (direction p goalp)]
                                              {:p (plus p (mult m 0.75))
@@ -155,14 +162,30 @@
             :players (update-in (:players state) [pid] steal-player :spear 1))
           (and (= :hands selected) (= :chest (get-in-map (:mworld state) tilep)))
           (assoc-in state [:players pid :open-chest] tilep)
-          (and (interactions [selected (get-in-map (:mworld state) tilep)])
+          #_(and (interactions [selected (get-in-map (:mworld state) tilep)])
                (not (some #(= tilep (:p %)) (:c-sites state))))
-          (assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
+          #_(assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
+          (placable selected)
+          (-> (update-in state [:bworld] assoc-in-map tilep (assoc tile 
+                                                              :object {:type selected
+                                                                       :spawn *tick*}))
+              (update-in [:players pid] steal-player selected 1))
+          (and (= :hands selected) object (ready? object) (object-fruits (:type object)))
+          (-> (update-in state [:bworld] assoc-in-map tilep (assoc-in tile [:object :spawn] *tick*))
+              (update-in [:players pid] give-player (object-fruits (:type object)) 1))
           true
           state)))
 
-(defn give-player [player x n]
-  (key-> player :inventar (add-items x n)))
+(defstep [players bworld]
+  (assoc state
+    :players (reduce (fn [ps [pid player]]
+                       (if-let [beneficary (and (ready? (:gold-spawn player) (seconds 10))
+                                                (:owner (get-in-map bworld (round2 (:p player)))))]
+                         (-> (assoc-in ps [pid :gold-spawn] *tick*)
+                             (update-in [beneficary :inventar] add-items :gold 1))
+                         ps))
+                     players
+                     players)))
 
 (defstep [players deadbunnies]
   (let [[dbs pls]
@@ -180,6 +203,38 @@
     (assoc state
       :deadbunnies (vec dbs)
       :players (into {} pls))))
+
+(defstep [players bworld]
+  (let [places (reduce (fn [places p]
+                         (into places (get-map-part bworld (:p p) [4 4])))
+                       #{}
+                       (vals players))
+        [world ljs] (reduce (fn [[world ljs] place]
+                        (or (and (= :lumberjack (:type (:object (nth place 2))))
+                                 (ready? (:object (nth place 2)))
+                                 (if-let [tree-p (some (fn [[pa pb place2]]
+                                                         (and (= :tree (:type (:object place2)))
+                                                              (ready? (:object place2))
+                                                              [pa pb]))
+                                                       (into [] (get-map-part bworld
+                                                                              [(first place)
+                                                                               (second place)]
+                                                                              [4 4])))]
+                                   (let [p [(first place) (second place)]]
+                                     [(assoc-in-map world p
+                                                    (assoc-in (nth place 2)
+                                                              [:object :spawn]
+                                                              *tick*))
+                                      (conj ljs {:p p
+                                                 :owner (:owner (nth place 2))
+                                                 :path (route2 p tree-p
+                                                               (make-p->ws human-walk-speeds bworld))})])))
+                            [world ljs]))
+                      [bworld []]
+                      places)]
+    (assoc state
+      :bworld world
+      :lumberjacks (concat (:lumberjacks state) ljs))))
 
 (defstep [players c-sites mworld]
   (let [[new-c-sites new-players]
@@ -250,8 +305,7 @@
                                                                              xs)}))
       state)))
 
-(def rotations {nil :grass
-                :grass :dirt
+(def rotations {:grass :dirt
                 :dirt :water
                 :water :tall-grass
                 :tall-grass :grass})
@@ -259,9 +313,12 @@
 (defn rotate-tile [{:keys [bworld players] :as state} pid]
   (let [player (players pid)
         p (round2 (:p player))
-        old (get-in-map bworld p)]
+        old (or (get-in-map bworld p)
+                {:ground :grass
+                 :owner pid})
+        new (update-in old [:ground] rotations)]
     (assoc state
-      :bworld (assoc-in-map bworld p (rotations old)))))
+      :bworld (assoc-in-map bworld p new))))
 
 (defn move-item [{:keys [chests players] :as state} pid]
   (let [{:keys [inventar inventar-p inventar-category-p open-chest energy] :as player} (get players pid)]

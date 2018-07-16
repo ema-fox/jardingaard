@@ -39,11 +39,11 @@
 
 (defn ensure-bunnies [{:keys [bunnies] :as state}]
   (if (and (< (count bunnies) num-bunnies)
-           (= 0 (mod (prng *seed* 565) 9)))
+           (= 0 (mod (prng *tick* 565) 9)))
     (assoc state
       :bunnies (conj bunnies {:p (rand-spawnpoint state)
                               :energy 5000
-                              :seed *seed*}))
+                              :seed *tick*}))
     state))
 
 (defn step! []
@@ -56,7 +56,7 @@
   (let [old-state @state]
     (alter state (fn [[c state]]
                    [(inc c)
-                    (binding [*seed* c]
+                    (binding [*tick* c]
                       (ensure-bunnies (step state (@messages c))))]))
     (let [changed-tiles (apply concat (for [[chunkp offsets] (mapcat #(gen-patch (get-in old-state [1 %])
                                                                                  (get-in @state [1 %]))
@@ -96,6 +96,7 @@
                :path nil
                :name name
                :died 0
+               :gold-spawn 0
                :energy 200
                :hp 200}]))))
 
@@ -104,11 +105,11 @@
   (dosync
    (print "generating world...")
    (flush)
-   (ref-set state [0 (or (if save-path
-                                 (try
-                                   (read-string (slurp save-path))
-                                   (catch java.io.FileNotFoundException e)))
-                               (new-world world-size bullet-speed))])
+   (ref-set state (or (if save-path
+                        (try
+                          (read-string (slurp save-path))
+                          (catch java.io.FileNotFoundException e)))
+                      [0 (new-world world-size bullet-speed)]))
    (println " done.")
    (alter maxpid #(apply max % (keys (get-in @state [1 :players]))))
    (print "predicting changes...")

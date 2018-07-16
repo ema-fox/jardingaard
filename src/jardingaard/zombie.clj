@@ -17,15 +17,15 @@
                                          (< (count zs) num-zombies)
                                          (conj {:p (rand-spawnpoint state)
                                                 :cooldown 0
-                                                :seed *seed*})))))
+                                                :seed *tick*})))))
 
 (defstep [players bworld mworld]
   (key->> state :zombies
           (map (fn [{:keys [p seed cooldown] :as zombie}]
-                 (if (and (walking? zombie) (not= 0 (mod (prng *seed* seed
+                 (if (and (walking? zombie) (not= 0 (mod (prng *tick* seed
                                                                (round p)) 9)))
                    (new-pos zombie zombie-walk-speeds bworld)
-                   (let [goal (and (= 0 (mod (prng *seed* seed (round p)) 9))
+                   (let [goal (and (= 0 (mod (prng *tick* seed (round p)) 9))
                                    (some (fn [[_ {pp :p}]]
                                            (if (< (distance p pp) 20)
                                              pp))
