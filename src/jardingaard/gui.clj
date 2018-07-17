@@ -78,9 +78,6 @@
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MIN_FILTER GL2/GL_NEAREST)
   (.glTexParameteri gl GL2/GL_TEXTURE_2D GL2/GL_TEXTURE_MAG_FILTER GL2/GL_NEAREST))
 
-(defn tile-groups [mp keyfn]
-  (group-by #(keyfn (nth % 2)) mp))
-
 (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer 0))
 (def ^FloatBuffer texc-buf (Buffers/newDirectFloatBuffer 0))
 
@@ -140,7 +137,7 @@
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
   (.glClearColor gl 0.5 0.5 0.5 1)
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
-  (let [{:keys [players bullets world c-sites bworld mworld bunnies deadbunnies zombies chests tick lumberjacks]} (current-state)]
+  (let [{:keys [players bullets world c-sites bunnies deadbunnies zombies chests tick lumberjacks]} (current-state)]
     (binding [*tick* tick]
     (when (get players @hello)
       (let [pfoo (round2 (get-in players [@hello :p]))
@@ -150,29 +147,26 @@
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [mp (get-map-part bworld pfoo (plus [1 1] (round (div size (* tsz 2.0)))))
-              btiles (tile-groups mp :ground)
-              mtiles (tile-groups mp #(:type (:object %)))]
-          (doseq [[bg tiles] btiles
+        (let [mp (get-map-part world pfoo (plus [1 1] (round (div size (* tsz 2.0)))))]
+          (doseq [[bg tiles] (group-by :ground mp)
                   :let [tex (txtr bg)]
                   :when tex]
-            (draw-double-tiles! gl tex tiles))
-          (doseq [[bg tiles] mtiles
+            (draw-double-tiles! gl tex (map :p tiles)))
+          (doseq [[bg tiles] (group-by :type mp)
                   :let [tex (txtr bg)]
                   :when tex]
-            (draw-double-tiles! gl tex tiles))
+            (draw-double-tiles! gl tex (map :p tiles)))
           (draw-tiles! gl (txtr :bunny) (map :p bunnies))
           (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
           (draw-tiles! gl (txtr :zombie) (map :p zombies))
-          (draw-tiles! gl (txtr :player) (map #(:p (second %)) players))
-          (draw-tiles! gl (txtr :player) (map :p lumberjacks))
+          (draw-tiles! gl (txtr :player) (map :p (vals players)))
+          (draw-tiles! gl (txtr :player) (map :p (vals lumberjacks)))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (set-color! gl 250 220 25)
-          (fill-rects! gl (for [tile (into [] mp)
-                                :let [object (:object (nth tile 2))]
-                                :when object]
-                            [(mult tile tsz) [(* (spawn-progress object) tsz) 5]]))
+          (fill-rects! gl (for [tile mp
+                                :when (:type tile)]
+                            [(mult (:p tile) tsz) [(* (spawn-progress tile) tsz) 5]]))
           (fill-rects! gl (for [{:keys [p t]} c-sites]
                             [(mult p tsz) [(inc (* t 0.3)) 5]]))
           (set-color! gl 0 0 0)

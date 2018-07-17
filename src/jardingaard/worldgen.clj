@@ -16,24 +16,15 @@
               [:granite :granite :granite :granite    :granite]]
              ys)]))
 
-(defn gen-world3 [world-size]
-  (let [mchunk (mapv (fn [_] (mapv (fn [_] nil) (range 32)))
-                     (range 32))
-        empty-world (into {} (for [p0 (range 0 world-size 32)
-                                   p1 (range 0 world-size 32)]
-                               [[p0 p1] mchunk]))]
-    [empty-world empty-world]))
-
 (defn new-world [world-size bullet-speed]
   (reduce (fn [st f]
             (f st))
-          (assoc-seq {:players {}
-                      :bullets []
-                      :c-sites []
-                      :bunnies []
-                      :deadbunnies []
-                      :chests {}                      :bullet-speed bullet-speed
-                      :spawn-point [(/ world-size 2) (/ world-size 2)]}
-                     :bworld :mworld
-                     (gen-world3 world-size))
+          {:players {}
+           :bullets []
+           :c-sites []
+           :bunnies []
+           :deadbunnies []
+           :chests {}                      :bullet-speed bullet-speed
+           :spawn-point [(/ world-size 2) (/ world-size 2)]
+           :world {}}
           @gen-fns))

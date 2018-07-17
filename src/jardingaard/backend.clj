@@ -21,12 +21,12 @@
           update-in [(+ (first @state) delay)] conj msg))
 
 (defn tiles-delay [ps]
-  (let [st (second @state)]
+  #_(let [st (second @state)]
     (doseq [p ps
             :let [delay (first (step-tile p (:bworld st) (:mworld st)))]
             :when delay]
       (add-msg delay [:tile p])))
-  (doseq [p ps
+  #_(doseq [p ps
           :when (= :tree (get-in-map (get-in @state [1 :world]) p))]
     (doseq [delay [(rand-int 99999) (rand-int 99999)]]
       (add-msg delay
@@ -37,7 +37,7 @@
 (def bunny-stats (writer (file "bunny-stats")))
 (def tiles-stats (writer (file "tiles-stats")))
 
-(defn ensure-bunnies [{:keys [bunnies] :as state}]
+#_(defn ensure-bunnies [{:keys [bunnies] :as state}]
   (if (and (< (count bunnies) num-bunnies)
            (= 0 (mod (prng *tick* 565) 9)))
     (assoc state
@@ -57,7 +57,7 @@
     (alter state (fn [[c state]]
                    [(inc c)
                     (binding [*tick* c]
-                      (ensure-bunnies (step state (@messages c))))]))
+                      (step state (@messages c)))]))
     (let [changed-tiles (apply concat (for [[chunkp offsets] (mapcat #(gen-patch (get-in old-state [1 %])
                                                                                  (get-in @state [1 %]))
                                                                      [:bworld :mworld])

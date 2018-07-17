@@ -59,6 +59,26 @@
 (defn insert-at [i xs x]
   (concat (take i xs) [x] (drop i xs)))
 
+(defn preduce [f val xs]
+  (reduce (fn [v x]
+            (let [result (f v x)]
+              (if (nil? result)
+                v
+                result)))
+          val
+          xs))
+
+(defn conji [m x]
+  (if-let [i (:i x)]
+    (assoc m i x)
+    (let [i (inc (apply max 0 (keys m)))]
+      (assoc m i (assoc x :i i)))))
+
+(defn conjp [m x]
+  (if-let [p (:p x)]
+    (assoc m p x)
+    (throw (ex-info "value must have :p member"))))
+
 (defn lowest-scored [xs]
   (->> (sort-by first xs)
        first
