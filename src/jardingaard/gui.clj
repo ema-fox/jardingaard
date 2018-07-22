@@ -19,6 +19,7 @@
 (def tsz 128)
 (def dtsz (* tsz 2))
 (def halftsz (/ tsz 2))
+(def quarttsz (/ tsz 4))
 
 (def isz 32)
 
@@ -31,6 +32,15 @@
 (def build-list (ref nil))
 
 (def dbg-info (atom nil))
+
+(defn ->gui [[p0 p1]]
+  (let [foo [(* (- p0 p1) halftsz)
+             (* (+ p0 p1) quarttsz)]]
+    foo))
+
+(defn <-gui [[p0 p1]]
+  [(+ (/ p0 tsz) (/ p1 halftsz))
+   (- (/ p1 halftsz) (/ p0 tsz))])
 
 (defn config-gui [cs apc pr sv]
   (def current-state cs)
@@ -55,7 +65,7 @@
                 1.0 0.0
                 1.0 1.0]]
     (.put buf (float f))))
-  
+
 (defn draw-string! [^TextRenderer rnd ^String s [p0 p1] [s0 s1]]
   (.draw rnd s (int p0) (int (- s1 p1))))
 
@@ -86,7 +96,8 @@
     (if-not (= 0 nrects)
       (let [nverts (* 4 nrects)]
         (when (< (.capacity vert-buf) (* 2 nverts))
-          (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer (* 2 nverts)))
+          (def ^FloatBuffer vert-buf (Buffers/newDirectFloatBuffer (* 2 nverts))))
+        (when (< (.capacity texc-buf) (* 2 nverts))
           (def ^FloatBuffer texc-buf (Buffers/newDirectFloatBuffer (* 2 nverts))))
         (.clear vert-buf)
         (.clear texc-buf)
@@ -101,13 +112,13 @@
         (.glTexCoordPointer gl 2 GL2/GL_FLOAT 0 texc-buf)
         (.glDrawArrays gl GL2/GL_QUADS 0 nverts)))))
 
-(defn draw-tiles! [gl tex tiles]
+(defn draw-beings! [gl tex tiles]
   (draw-rects! gl tex (for [p tiles]
-                        [(mult p tsz) [tsz tsz]])))
+                        [(minus (->gui p) [quarttsz halftsz]) [halftsz halftsz]])))
 
 (defn draw-double-tiles! [gl tex tiles]
   (draw-rects! gl tex (for [p tiles]
-                        [(mult (plus p [-0.5 -0.5]) tsz) [dtsz dtsz]])))
+                        [(minus (->gui p) [tsz (+ halftsz tsz)]) [dtsz dtsz]])))
 
 (defn fill-rects! [^GL2 gl rects]
   (let [nrects (count rects)]
@@ -141,39 +152,48 @@
     (binding [*tick* tick]
     (when (get players @hello)
       (let [pfoo (round2 (get-in players [@hello :p]))
-            offset (minus (mult size 0.5) (mult (get-in players [@hello :p]) tsz))]
+            offset (minus (mult size 0.5) (->gui (get-in players [@hello :p])))
+            {:keys [p path]} (players @hello)]
         (prepare-gl! gl offset size)
         (set-color! gl 255 255 255)
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [mp (get-map-part world pfoo (plus [1 1] (round (div size (* tsz 2.0)))))]
-          (doseq [[bg tiles] (group-by :ground mp)
-                  :let [tex (txtr bg)]
-                  :when tex]
-            (draw-double-tiles! gl tex (map :p tiles)))
-          (doseq [[bg tiles] (group-by :type mp)
-                  :let [tex (txtr bg)]
-                  :when tex]
-            (draw-double-tiles! gl tex (map :p tiles)))
-          (draw-tiles! gl (txtr :bunny) (map :p bunnies))
-          (draw-tiles! gl (txtr :deadbunny) (map :p deadbunnies))
-          (draw-tiles! gl (txtr :zombie) (map :p zombies))
-          (draw-tiles! gl (txtr :player) (map :p (vals players)))
-          (draw-tiles! gl (txtr :player) (map :p (vals lumberjacks)))
+        (let [mp (get-map-part world pfoo (plus [1 1] (round (div size tsz ))))]
+          (doseq [{:keys [p ground type]} (sort-by :p mp)]
+            (if-let [tex (txtr ground)]
+              (draw-double-tiles! gl tex [p]))
+            (if-let [tex (txtr type)]
+              (draw-double-tiles! gl tex [p]))
+            (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals players))))
+            (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals lumberjacks)))))
+          #_(draw-beings! gl (txtr :bunny) (map :p bunnies))
+          #_(draw-beings! gl (txtr :deadbunny) (map :p deadbunnies))
+          #_(draw-beings! gl (txtr :zombie) (map :p zombies))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (set-color! gl 250 220 25)
           (fill-rects! gl (for [tile mp
                                 :when (:type tile)]
-                            [(mult (:p tile) tsz) [(* (spawn-progress tile) tsz) 5]]))
-          (fill-rects! gl (for [{:keys [p t]} c-sites]
+                            [(minus (->gui (:p tile)) [halftsz halftsz]) [(* (spawn-progress tile) tsz) 5]]))
+          (set-color! gl 220 180 20)
+          (draw-lines! gl (for [pp (cons p path)]
+                            (->gui pp)))
+          #_(fill-rects! gl (for [{:keys [p t]} c-sites]
                             [(mult p tsz) [(inc (* t 0.3)) 5]]))
           (set-color! gl 0 0 0)
-          (fill-rects! gl (for [{p :p} bullets]
-                            [(plus [12 12] (mult p tsz)) [5 5]])))
-        (.glTranslatef gl (- 0 (first offset)) (- 0 (second offset)) 0)
-        (let [{:keys [inventar inventar-p inventar-category-p path open-chest hp energy p]}
+          #_(fill-rects! gl (for [{p :p} bullets]
+                            [(plus [12 12] (mult p tsz)) [5 5]]))
+          (.glTranslatef gl (- 0 (first offset)) (- 0 (second offset)) 0)
+          (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
+          (.beginRendering rnd (first size) (second size))
+          (.setColor rnd 1 1 0.5 1)
+          (doseq [{:keys [type merit p]} mp
+                  :when (= type :idol)]
+            (draw-string! rnd (str merit) (minus (plus (->gui p) offset) [20 tsz]) size))
+          (.endRendering rnd)
+          (.glEnableClientState gl GL2/GL_VERTEX_ARRAY))
+        (let [{:keys [inventar inventar-p inventar-category-p open-chest hp energy]}
               (players @hello)
               ninventar (count inventar)
               pa [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
@@ -187,10 +207,6 @@
           (fill-rects! gl [[[20 mid1] [20 200]]])
           (set-color! gl 150 120 15)
           (fill-rects! gl [[[20 mid1] [20 energy]]])
-          (set-color! gl 220 180 20)
-          (draw-lines! gl (for [pp (cons p path)]
-                            (plus (plus (mult (minus pp p) tsz) [halftsz halftsz])
-                                   [(/ (first size) 2) (/ (second size) 2)])))
           (set-color! gl 20 40 10)
           (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
                                 (if @build-index
@@ -287,7 +303,6 @@
     KeyEvent/VK_S (scroll :inc)
     KeyEvent/VK_A (scroll :left)
     KeyEvent/VK_D (scroll :right)
-    KeyEvent/VK_J (add-plcmd [:rotate-tile])
     KeyEvent/VK_TAB (if (get-in (current-state) [:players @hello :open-chest])
                       (add-plcmd [:close-chest])
                       (dosync
@@ -305,9 +320,9 @@
 
 (defn get-event-p [e]
   (-> [(.getX e) (.getY e)]
-      (minus [(/ tsz 2) (/ tsz 2)])
-      (div tsz)
-      (plus (minus (get-in (current-state) [:players @hello :p]) (div @size (* tsz 2.0))))))
+      (plus (minus (->gui (get-in (current-state) [:players @hello :p]))
+                   (div @size 2)))
+      <-gui))
 
 (defn mouse-pressed [e]
   (condp = (.getButton e)
@@ -326,7 +341,8 @@
                            'twig 'gun 'pickaxe 'tree-crown 'water 'sand 'steak 'steak-fried
                            'thread 'fur 'axe 'chest 'shrub-pear 'granite 'granite-floor
                            'rock 'stone 'spear 'campfire-on 'campfire-off 'campfire-empty
-                           'bunny 'deadbunny 'zombie 'player 'trunk 'hands 'pear]))))
+                           'bunny 'deadbunny 'zombie 'player 'trunk 'hands 'pear 'lumberjack
+                           'idol]))))
 
 (defn create-gui []
   (let [can (doto (GLCanvas.)

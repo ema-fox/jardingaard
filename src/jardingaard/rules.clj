@@ -21,10 +21,14 @@
                         :granite-floor 1
                         :tall-grass 1.3})
 
-(def placable #{:wall :windowed-wall :door :rock :chest :tree :lumberjack})
+(def placable #{:wall :windowed-wall :door :rock :chest :tree :lumberjack :idol})
+
+(def grounds #{:dirt :water :grass :tall-grass})
 
 (def work-times {:tree (seconds 9)
-                 :lumberjack (seconds 2)})
+                 :idol (minutes 1)
+                 :lumberjack (seconds 2)
+                 :lumberjack-being (seconds 0.5)})
 
 (def object-fruits {:tree :wood})
 
@@ -65,6 +69,11 @@
               [:tree] {:gold 3}
               [:lumberjack] {:gold 5
                              :wood 3}
+              [:idol] {:gold 12 :wood 38}
+              [:water] {:gold 23}
+              [:dirt] {:gold 6}
+              [:grass] {:dirt 1 :gold 3}
+              [:tall-grass] {:grass 1 :gold 4}
               [:door] {:twig 13}
               [:chest] {:trunk 1}
               [:pickaxe] {:stone 2

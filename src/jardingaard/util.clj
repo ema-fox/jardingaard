@@ -61,10 +61,7 @@
 
 (defn preduce [f val xs]
   (reduce (fn [v x]
-            (let [result (f v x)]
-              (if (nil? result)
-                v
-                result)))
+            (or (f v x) v))
           val
           xs))
 

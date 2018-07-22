@@ -75,7 +75,9 @@
 (defstep [world]
   (update-in state [:lumberjacks]
              #(map-kv (fn [i lj]
-                        (new-pos lj (make-p->ws human-walk-speeds world)))
+                        (if (ready? lj)
+                          (new-pos lj (make-p->ws human-walk-speeds world))
+                          lj))
                       %)))
 
 (defn add-items [items x n]
@@ -89,24 +91,43 @@
 (defn give-player [player x n]
   (key-> player :inventar (add-items x n)))
 
+(defn find-tree [world pa pb]
+  (->> (get-map-part world pa [4 4])
+       (filter (fn [tile]
+                 (and (= :tree (:type tile))
+                      (ready? tile))))
+       (sort-by (fn [tree]
+                  [(distance pb (:p tree))
+                   (distance pa (:p tree))
+                   (:spawn tree)]))
+       first))
+
 (defstep [lumberjacks]
-  (preduce (fn [{:keys [world] :as state} lj]
-             (if-not (walking? lj)
-               (let [p (round2 (:p lj))
-                     tile (world p)]
-                 (cond (and (= (:type tile) :tree)
-                          (ready? tile))
-                       (-> (assoc-in state [:world p :spawn] *tick*)
-                           (update-in [:lumberjacks] conji (assoc lj
-                                                             :path (route2 (:p lj) (:home lj) (make-p->ws human-walk-speeds world)))))
-                       (= (:type tile) :lumberjack)
-                       (-> (assoc-in state [:world p] (assoc tile
-                                                         :spawn *tick*
-                                                         :working false))
-                           (update-in [:players (:owner tile)] give-player :wood 1)
-                           (update-in [:lumberjacks] dissoc (:i lj)))))))
+  (reduce (fn [{:keys [world] :as state} lj]
+            (let [p (round2 (:p lj))
+                  tile (world p)]
+              (cond (= (:home lj) p)
+                    (cond-> (update state :lumberjacks dissoc (:i lj))
+                            (:inventar lj)
+                            (update-in [:players (:owner tile)] give-player :wood 1)
+                            (= (:type tile) :lumberjack)
+                            (assoc-in [:world p] (assoc tile
+                                                   :spawn *tick*
+                                                   :working false)))
+                    (and (= (:type tile) :tree)
+                         (ready? tile))
+                    (-> (assoc-in state [:world p :spawn] *tick*)
+                        (update :lumberjacks conji (assoc lj
+                                                     :inventar true
+                                                     :spawn *tick*
+                                                     :path (route2 (:p lj) (:home lj) (make-p->ws human-walk-speeds world)))))
+                    :else (let [dest (or (:p (find-tree world (:home lj) (:p lj)))
+                                         (:home lj))]
+                            (update state :lumberjacks conji (assoc lj
+                                                               :spawn *tick*
+                                                               :path (route2 (:p lj) dest (make-p->ws human-walk-speeds world))))))))
           state
-          (vals lumberjacks)))
+          (filter (comp not walking?) (vals lumberjacks))))
 
 #_(defstep [bullets players bullet-speed spawn-point]
   (let [[bus pls] (step-bullets&entities
@@ -178,14 +199,32 @@
           #_(and (interactions [selected (get-in-map (:mworld state) tilep)])
                (not (some #(= tilep (:p %)) (:c-sites state))))
           #_(assoc-in (walk state pid tilep) [:players pid :do-at] tilep)
+          (and (grounds selected)
+               (not (:owner tile)))
+          (-> (update-in state [:world] conjp {:owner pid
+                                               :ground selected
+                                               :p tilep})
+              (update-in [:players pid] steal-player selected 1))
+          (and (= :pickaxe selected)
+               (= (:owner tile) pid))
+          (if-let [object (:type tile)]
+            (-> (update-in state [:world tilep] dissoc :type :spawn :working :merit)
+                (update-in [:players pid] give-player object 1))
+            (-> (update-in state [:world] dissoc tilep)
+                (update-in [:players pid] give-player (:ground tile) 1)))
           (placable selected)
           (-> (update-in state [:world tilep] assoc
                          :type selected
                          :spawn *tick*)
+              (cond-> (= :idol selected)
+                      (update-in [:world tilep] assoc :merit 0))
               (update-in [:players pid] steal-player selected 1))
           (and (= :hands selected) (:type tile) (ready? tile) (object-fruits (:type tile)))
           (-> (assoc-in state [:world tilep :spawn] *tick*)
               (update-in [:players pid] give-player (object-fruits (:type tile)) 1))
+          (and (= :gold selected) (= :idol (:type tile)))
+          (-> (update-in state [:world tilep :merit] inc)
+              (update-in [:players pid] steal-player :gold 1))
           true
           state)))
 
@@ -220,27 +259,20 @@
 (defstep [players world]
   (let [tiles (set (mapcat (fn [player]
                              (get-map-part world (:p player) [4 4]))
-                           (vals players)))
-        [world ljs] (reduce (fn [[world ljs] tile]
-                              (or (and (= :lumberjack (:type tile))
-                                       (ready? tile)
-                                       (if-let [tree (->> (get-map-part world (:p tile) [4 4])
-                                                          (filter (fn [tile2]
-                                                                    (and (= :tree (:type tile2))
-                                                                         (ready? tile2))))
-                                                          (sort-by :spawn)
-                                                          first)]
-                                         [(assoc-in world [(:p tile) :working] true)
-                                          (conj ljs {:p (:p tile)
-                                                     :home (:p tile)
-                                                     :path (route2 (:p tile) (:p tree)
-                                                                   (make-p->ws human-walk-speeds world))})]))
-                                  [world ljs]))
-                            [world []]
-                            tiles)]
-    (assoc state
-      :world world
-      :lumberjacks (reduce conji (:lumberjacks state) ljs))))
+                           (vals players)))]
+    (preduce (fn [{:keys [world] :as state} tile]
+               (and (= :lumberjack (:type tile))
+                    (ready? tile)
+                    (if-let [tree (find-tree world (:p tile) (:p tile))]
+                      (-> (assoc-in state [:world (:p tile) :working] true)
+                          (update :lumberjacks conji
+                                  {:p (:p tile)
+                                   :home (:p tile)
+                                   :type :lumberjack-being
+                                   :spawn *tick*
+                                   :path (route2 (:p tile) (:p tree) (make-p->ws human-walk-speeds world))})))))
+             state
+             tiles)))
 
 #_(defstep [players c-sites mworld]
   (let [[new-c-sites new-players]
@@ -304,21 +336,6 @@
                                        r)
                                xs)))
       state)))
-
-(def rotations {:grass :dirt
-                :dirt :water
-                :water :tall-grass
-                :tall-grass :grass})
-
-(defn rotate-tile [{:keys [world players] :as state} pid]
-  (let [player (players pid)
-        p (round2 (:p player))
-        old (or (world p)
-                {:ground :grass
-                 :owner pid
-                 :p p})
-        new (update-in old [:ground] rotations)]
-    (assoc-in state [:world p] new)))
 
 (defn move-item [{:keys [chests players] :as state} pid]
   (let [{:keys [inventar inventar-p inventar-category-p open-chest energy] :as player} (get players pid)]
@@ -388,8 +405,7 @@
                :close-chest (assoc-in state [:players pid :open-chest] nil)
                :scrollip (update-in state [:players pid] scrollip (second cmd) state)
                :move-item (move-item state pid)
-               :build (build state pid (second cmd))
-               :rotate-tile (rotate-tile state pid)))
+               :build (build state pid (second cmd))))
     #_:tile #_(let [[_ btile mtile] (step-tile (second msg) (:bworld state) (:mworld state))]
             (assoc state
               :bworld (assoc-in-map (:bworld state) (second msg) btile)

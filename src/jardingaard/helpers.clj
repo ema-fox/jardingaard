@@ -13,8 +13,8 @@
   (map? (:players state)))
 
 (defn check-players-p [state]
-  (every? #(get-in % [1 :p])
-          (:players state)))
+  (every? :p (vals (:players state)))
+  (every? :p (vals (:lumberjacks state))))
 
 (defmacro defstep [args & body]
   `(dosync (alter step-fns conj (fn [{:keys ~args :as ~'state}]
