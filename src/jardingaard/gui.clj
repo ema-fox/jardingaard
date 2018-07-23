@@ -7,8 +7,8 @@
            [java.awt Color Dimension Graphics2D RenderingHints Transparency Image Frame Font]
            [java.awt.image BufferedImage]
            [java.awt.event KeyEvent MouseEvent]
-           [javax.media.opengl.awt GLCanvas]
-           [javax.media.opengl GLEventListener GL GLCapabilities GLProfile
+           [com.jogamp.opengl.awt GLCanvas]
+           [com.jogamp.opengl GLEventListener GL GLCapabilities GLProfile
             GL2 GLAutoDrawable GLDrawableFactory]
            [com.jogamp.opengl.util.awt TextRenderer]
            [com.jogamp.opengl.util.texture Texture TextureIO]
