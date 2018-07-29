@@ -16,15 +16,17 @@
               [:granite :granite :granite :granite    :granite]]
              ys)]))
 
-(defn new-world [world-size bullet-speed]
+(defn new-world [world-size]
   (reduce (fn [st f]
             (f st))
           {:players {}
-           :bullets []
+           :lumberjacks {}
+           :zombies {}
+           :arrows {}
            :c-sites []
            :bunnies []
            :deadbunnies []
-           :chests {}                      :bullet-speed bullet-speed
+           :chests {}
            :spawn-point [(/ world-size 2) (/ world-size 2)]
            :world {}}
           @gen-fns))

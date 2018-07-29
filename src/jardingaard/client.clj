@@ -28,9 +28,9 @@
   (Thread/sleep (let [t (+ tick-duration
                            (condp = @skew
                              :plus
-                             -20
+                             -10
                              :minus
-                             20
+                             10
                              0))]
                   (dosync (ref-set skew nil))
                   t))
@@ -47,7 +47,8 @@
 (defn current-state2 []
   (if (and (get-in @state [1 :players @hello])
            (< (- @fr-counter (first @state)) 40))
-    (step-to @state @fr-counter (merge-with concat @srv-messages @cl-messages))))
+    (assoc (step-to @state @fr-counter (merge-with concat @srv-messages @cl-messages))
+      :tick @fr-counter)))
 
 (defn set-dbg-info []
   (swap! dbg-info (constantly (str @fr-counter
@@ -70,7 +71,7 @@
 
 (defn msg [m]
   (send-off messenger (fn [a]
-                        (try 
+                        (try
                           (binding [*out* (BufferedWriter. (OutputStreamWriter. (.getOutputStream conn)))]
                             (prn m))
                           (catch java.net.SocketException e)))))
@@ -101,7 +102,7 @@
 (defn handle-msgs []
   (dorun (map handle-msg (reads-socket conn)))
   (connection-lost!))
-  
+
 (defn -main [& [^String host]]
   (def conn (loop []
               (if-let [c (try

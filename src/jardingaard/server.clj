@@ -23,6 +23,7 @@
 (def latest-player-message (ref {}))
 
 (defn log [m]
+  (prn m)
   (with-open [out (writer "log" :append true)]
     (.write out (str (Date.) " " m "\n"))))
 
@@ -32,7 +33,9 @@
   (dosync
    (let [pid (@conns conn)]
      (alter pingss dissoc pid)
-     (alter latest-player-message dissoc pid))
+     (alter latest-player-message dissoc pid)
+     (alter player-states dissoc pid)
+     (alter player-message-st dissoc pid))
    (alter conns dissoc conn)))
 
 (defn send-client [conn msg]
@@ -56,24 +59,7 @@
 
 (defn state-for [[c {:keys [bworld mworld players bunnies] :as state}] pid]
   (let [p (get-in players [pid :p])]
-    [c (assoc-seq state
-                  :bunnies
-                  :bworld
-                  :mworld
-                  (if p [(vec (take 50 (filter (fn a [{pb :p}]
-                                                 (< (manhatten pb p) 50))
-                                               bunnies)))
-                         (let [[p0 p1] (round p)]
-                           (select-keys bworld (for [b0 [-32 0 32]
-                                                     b1 [-32 0 32]]
-                                                 (plus [b0 b1] [(bit-and high-mask p0)
-                                                                (bit-and high-mask p1)]))))
-                         (let [[p0 p1] (round p)]
-                           (select-keys mworld (for [b0 [-32 0 32]
-                                                     b1 [-32 0 32]]
-                                                 (plus [b0 b1] [(bit-and high-mask p0)
-                                                                (bit-and high-mask p1)]))))]
-                      [nil nil nil]))]))
+    [c state]))
 
 (defn update-clients []
   (doseq [[conn pid] @conns]
@@ -110,8 +96,6 @@
                (> (+ (nth m 2) (half-median-ping pid)) @fr-counter)
                (send-client conn [:skew :minus])))
      :save (spit save-path @state)
-     :name (do (add-player! pid (second m))
-               (log [:name (second m) @conn]))
      :cmds
      (let [[_ origin-t cmds] m]
        (alter latest-player-message assoc pid origin-t)
@@ -123,26 +107,42 @@
        (update-clients)
        (update-messages!)))))
 
-(defn listen [conn]
+(defn listen [conn msgs]
   (let [pid (@conns conn)]
-    (doseq [m (reads-socket @conn)]
+    (doseq [m msgs]
       (process-msg m pid conn)))
   (purge-conn conn))
+
+(defn ensure-player! [player-name]
+  (or (some (fn [[pid {n :name}]]
+              (if (= n player-name)
+                pid))
+            (get-in @state [1 :players]))
+      (let [pid (alter maxpid inc)]
+        (add-player! pid player-name)
+        pid)))
+
+(defn listen-for-name [conn]
+  (let [msgs (reads-socket @conn)
+        m (first msgs)]
+    (if (= (first m) :name)
+      (do
+        (dosync
+         (let [pid (ensure-player! (second m))]
+           (alter conns assoc conn pid)
+           (alter pingss assoc pid (repeat 10 0))
+           (alter latest-player-message assoc pid @fr-counter)
+           (send-client conn [:hello pid])
+           (send-client conn [:patch-messages (gen-patch nil @player-message-st) @fr-counter])))
+        (listen conn (rest msgs)))
+      (log [:wrong-opening-msg m @conn]))))
 
 (defn accept []
   (loop []
     (let [conn (loud-agent (doto (.accept socket)
                              (.setTcpNoDelay true)))]
       (log [:connect @conn])
-      (dosync
-       (let [pid (alter maxpid inc)]
-         (alter conns assoc conn pid)
-         (alter pingss assoc pid (repeat 10 0))
-         (alter latest-player-message assoc pid @fr-counter)
-         (send-client conn [:hello pid])
-         ;(send-client conn [:patch-state (gen-patch nil @player-state)])
-         (send-client conn [:patch-messages (gen-patch nil @player-message-st) @fr-counter])))
-      (.start (Thread. #(listen conn))))
+      (.start (Thread. #(listen-for-name conn))))
     (recur)))
 
 

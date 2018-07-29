@@ -81,24 +81,21 @@
                                      @messages))))
 
 (defn add-player! [pid name]
-  (if-let [oldpid (some (fn [[pid {n :name}]]
-                          (if (= n name)
-                            pid))
-                        (get-in @state [1 :players]))]
-    (alter state update-in [1 :players]
-           #(dissoc (assoc % pid (% oldpid)) oldpid))
-    (let [origin-t (first @state)]
-      (alter messages update-in [origin-t] conj
-             [:new-player pid
-              {:inventar [[:hands 1] [:pickaxe 1]]
-               :inventar-p 0
-               :inventar-category-p :inventar
-               :path nil
-               :name name
-               :died 0
-               :gold-spawn 0
-               :energy 200
-               :hp 200}]))))
+  (let [origin-t (first @state)]
+    (alter messages update-in [origin-t] conj
+           [:new-player pid
+            {:i pid
+             :inventar [[:hands 1] [:pickaxe 1] [:dirt 1]]
+             :inventar-p 0
+             :inventar-category-p :inventar
+             :path nil
+             :name name
+             :died 0
+             :gold-spawn 0
+             :arrow-spawn 0
+             :merit 0
+             :energy 200
+             :hp 200}])))
 
 (defn load-world! [sp]
   (def save-path sp)
@@ -109,7 +106,7 @@
                         (try
                           (read-string (slurp save-path))
                           (catch java.io.FileNotFoundException e)))
-                      [0 (new-world world-size bullet-speed)]))
+                      [0 (new-world world-size)]))
    (println " done.")
    (alter maxpid #(apply max % (keys (get-in @state [1 :players]))))
    (print "predicting changes...")

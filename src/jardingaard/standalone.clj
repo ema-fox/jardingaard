@@ -1,4 +1,5 @@
 (ns jardingaard.standalone
+  (:gen-class)
   (:use [jardingaard gui backend shared rules])
   (:import [java.util Date]))
 

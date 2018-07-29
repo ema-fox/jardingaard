@@ -124,7 +124,7 @@
 	  dist (Math/sqrt (+ (* d0 d0) (* d1 d1)))]
       [(/ d0 dist) (/ d1 dist)])
     [0 0]))
-    
+
 (defn ^:static ^Float distance [[pa0 pa1] [pb0 pb1]]
   (let [d0 (- (float pb0) (float pa0))
         d1 (- (float pb1) (float pa1))
@@ -180,6 +180,9 @@
        xs
        (rest xs)))
 
+(defn nil0 [x]
+  (and (not= x 0) x))
+
 (defn alter-in [r key f & args]
   (alter r assoc key (apply f (get @r key) args)))
 
@@ -193,7 +196,7 @@
                        [:error-handler (fn [a e]
                                          (prn a e))])))
 
-(defn forkIO [f] (.start (Thread. f))) ; cool bilingual joke or just tacky? 
+(defn forkIO [f] (.start (Thread. f))) ; cool bilingual joke or just tacky?
 
 (defn ^Integer prng [& args]
   (let [^Integer foo (reduce (fn [res x]
@@ -209,6 +212,9 @@
                              args)]
     (bit-xor foo (rem foo 7)
              (bit-shift-right foo 1))))
+
+(defn prng-nth [coll & args]
+  (nth coll (mod (apply prng args) (count coll))))
 
 (declare gen-patch)
 

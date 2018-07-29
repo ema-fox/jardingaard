@@ -148,7 +148,7 @@
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
   (.glClearColor gl 0.5 0.5 0.5 1)
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
-  (let [{:keys [players bullets world c-sites bunnies deadbunnies zombies chests tick lumberjacks]} (current-state)]
+  (let [{:keys [players bullets world c-sites bunnies deadbunnies zombies chests tick lumberjacks arrows]} (current-state)]
     (binding [*tick* tick]
     (when (get players @hello)
       (let [pfoo (round2 (get-in players [@hello :p]))
@@ -166,16 +166,24 @@
             (if-let [tex (txtr type)]
               (draw-double-tiles! gl tex [p]))
             (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals players))))
-            (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals lumberjacks)))))
+            (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals lumberjacks))))
+            (draw-beings! gl (txtr :zombie) (filter #(= p (round2 %)) (map :p (vals zombies)))))
           #_(draw-beings! gl (txtr :bunny) (map :p bunnies))
           #_(draw-beings! gl (txtr :deadbunny) (map :p deadbunnies))
-          #_(draw-beings! gl (txtr :zombie) (map :p zombies))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
+          (set-color! gl 90 40 25)
+          (doseq [a (vals arrows)]
+            (draw-lines! gl [(minus (->gui (:p a)) [0 quarttsz])
+                             (minus (->gui (plus (:p a) (mult (direction (:p a) (:p (zombies (:target a)))) 0.1))) [0 quarttsz])]))
           (set-color! gl 250 220 25)
           (fill-rects! gl (for [tile mp
                                 :when (:type tile)]
                             [(minus (->gui (:p tile)) [halftsz halftsz]) [(* (spawn-progress tile) tsz) 5]]))
+          (set-color! gl 250 20 25)
+          (fill-rects! gl (for [tile mp
+                                :when (:broken tile)]
+                            [(minus (->gui (:p tile)) [halftsz halftsz]) [(* (broken-progress tile) tsz) 5]]))
           (set-color! gl 220 180 20)
           (draw-lines! gl (for [pp (cons p path)]
                             (->gui pp)))
@@ -191,6 +199,9 @@
           (doseq [{:keys [type merit p]} mp
                   :when (= type :idol)]
             (draw-string! rnd (str merit) (minus (plus (->gui p) offset) [20 tsz]) size))
+          (doseq [[pid {:keys [p merit name]}] players]
+            (draw-string! rnd (str name " - " merit)
+                          (minus (plus (->gui p) offset) [20 halftsz]) size))
           (.endRendering rnd)
           (.glEnableClientState gl GL2/GL_VERTEX_ARRAY))
         (let [{:keys [inventar inventar-p inventar-category-p open-chest hp energy]}
@@ -255,10 +266,7 @@
                       :when (< 1 n)]
                 (draw-string! rnd (str n) (plus (plus pa [2 35]) [-40 (* i 40)]) size))))
           (.setColor rnd 0 0 0 1)
-          (doseq [[pid {:keys [p died name]}] players]
-            (draw-string! rnd (str name " - " died)
-                          (plus offset (minus (mult p tsz) [0 20]))
-                          size)))
+          )
         (.endRendering rnd)))))
   (.beginRendering rnd (first size) (second size))
   (.setColor rnd 1 1 1 1)

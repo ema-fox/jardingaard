@@ -25,10 +25,13 @@
 
 (def ^:dynamic *tick*)
 
-(defn spawn-progress [{:keys [spawn type working]}]
-  (if working
+(defn spawn-progress [{:keys [spawn type working broken]}]
+  (if (or working broken)
     0
     (min 1 (/ (- *tick* spawn) (work-times type)))))
+
+(defn broken-progress [{:keys [type broken]}]
+  (/ broken (*broken* type)))
 
 (defn ready?
   ([spawn ticks]
@@ -165,7 +168,7 @@
 (defn step-bullets&entities [f pf bullet-speed bus entities]
   (ttmap (fn [bullets entity]
            (let [p (pf entity)
-                 newbullets 
+                 newbullets
                  (filter (fn [{bp :p m :m}]
                            (< 0.5 (distance p (p-on-line bp
                                                          (plus bp (mult m bullet-speed))

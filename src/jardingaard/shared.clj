@@ -80,6 +80,19 @@
                           lj))
                       %)))
 
+(defstep [world]
+  (update state :zombies
+          (fn [zombies]
+            (map-kv (fn [i zb]
+                      (new-pos zb (comp (if (some #(and (< (distance (:p %) (:p zb))
+                                                           0.5)
+                                                        (< (:i %) (:i zb)))
+                                                   (vals zombies))
+                                          #(* % 0.5)
+                                          identity)
+                                        (make-p->ws zombie-walk-speeds world))))
+                    zombies))))
+
 (defn add-items [items x n]
   (if (some #(= (first %) x) items)
     (mapv #(if (= (first %) x)
@@ -90,6 +103,21 @@
 
 (defn give-player [player x n]
   (key-> player :inventar (add-items x n)))
+
+(defstep [arrows]
+  (let [state (preduce (fn [state arrow]
+                         (if-let [target ((:zombies state) (:target arrow))]
+                           (if (< (distance (:p arrow) (:p target)) arrow-speed)
+                             (-> (update state :zombies dissoc (:target arrow))
+                                 (update-in [:players (:owner arrow)] give-player :gold 1))
+                             (update state :arrows conji (update arrow :p plus (mult (direction (:p arrow) (:p target)) arrow-speed))))))
+                      state
+                      (vals arrows))]
+    (preduce (fn [state arrow]
+               (if-not ((:zombies state) (:target arrow))
+                 (update state :arrows dissoc (:i arrow))))
+            state
+            (vals arrows))))
 
 (defn find-tree [world pa pb]
   (->> (get-map-part world pa [4 4])
@@ -128,6 +156,34 @@
                                                                :path (route2 (:p lj) dest (make-p->ws human-walk-speeds world))))))))
           state
           (filter (comp not walking?) (vals lumberjacks))))
+
+(defn remove-object [state tilep]
+  (update-in state [:world tilep] dissoc :type :spawn :working :merit :broken))
+
+(defstep [zombies]
+  (preduce (fn [{:keys [world] :as state} zb]
+             (let [p (round2 (:p zb))
+                   tile (world p)]
+               (if (and (= (:type tile) :idol)
+                        (not (:broken tile)))
+                 (update-in state [:world p] assoc
+                            :broken (*broken* :idol)
+                            :merit 0))))
+           state
+           (filter (comp not walking?) (vals zombies))))
+
+(defstep [players zombies]
+  (preduce (fn [state [pid player]]
+             (if-let [targets (and (ready? (:arrow-spawn player) 20)
+                                   (seq (filter #(< (distance (:p player) (:p %)) 8)
+                                                (vals zombies))))]
+               (let [target (prng-nth targets *tick* (round2 (:p player)) pid)]
+                 (-> (update state :arrows conji {:p (:p player)
+                                                  :owner pid
+                                                  :target (:i target)})
+                     (assoc-in [:players pid :arrow-spawn] *tick*)))))
+           state
+           players))
 
 #_(defstep [bullets players bullet-speed spawn-point]
   (let [[bus pls] (step-bullets&entities
@@ -208,7 +264,7 @@
           (and (= :pickaxe selected)
                (= (:owner tile) pid))
           (if-let [object (:type tile)]
-            (-> (update-in state [:world tilep] dissoc :type :spawn :working :merit)
+            (-> (remove-object state tilep)
                 (update-in [:players pid] give-player object 1))
             (-> (update-in state [:world] dissoc tilep)
                 (update-in [:players pid] give-player (:ground tile) 1)))
@@ -217,14 +273,21 @@
                          :type selected
                          :spawn *tick*)
               (cond-> (= :idol selected)
-                      (update-in [:world tilep] assoc :merit 0))
+                      (update-in [:world tilep] assoc :merit 0)
+                      (*broken* selected)
+                      (update-in [:world tilep] assoc :broken (*broken* selected)))
               (update-in [:players pid] steal-player selected 1))
           (and (= :hands selected) (:type tile) (ready? tile) (object-fruits (:type tile)))
           (-> (assoc-in state [:world tilep :spawn] *tick*)
               (update-in [:players pid] give-player (object-fruits (:type tile)) 1))
-          (and (= :gold selected) (= :idol (:type tile)))
+          (and (= :gold selected) (= :idol (:type tile)) (not (:broken tile)))
           (-> (update-in state [:world tilep :merit] inc)
+              (update-in [:players pid :merit] inc)
               (update-in [:players pid] steal-player :gold 1))
+          (and (= :wood selected) (:broken tile))
+          (-> (update-in state [:world tilep :broken] (comp nil0 dec))
+              (assoc-in [:world tilep :spawn] *tick*)
+              (update-in [:players pid] steal-player :wood 1))
           true
           state)))
 
@@ -271,6 +334,26 @@
                                    :type :lumberjack-being
                                    :spawn *tick*
                                    :path (route2 (:p tile) (:p tree) (make-p->ws human-walk-speeds world))})))))
+             state
+             tiles)))
+
+(defstep [players world]
+  (let [tiles (set (mapcat (fn [player]
+                             (get-map-part world (:p player) [4 4]))
+                           (vals players)))]
+    (preduce (fn [{:keys [world] :as state} tile]
+               (and (= :idol (:type tile))
+                    (ready? tile)
+                    (< 0 (:merit tile))
+                    (-> (reduce (fn [state _]
+                                  (update state :zombies conji
+                                          {:p (plus (:p tile) [4 4])
+                                           :goal (:p tile)
+                                           :type :zombie
+                                           :spawn *tick*
+                                           :path (route2 (plus (:p tile) [4 4]) (:p tile) (make-p->ws zombie-walk-speeds world))}))
+                                state (range (:merit tile)))
+                        (assoc-in [:world (:p tile) :spawn] *tick*))))
              state
              tiles)))
 
