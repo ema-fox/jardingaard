@@ -65,6 +65,9 @@
           val
           xs))
 
+(defn updates [val xs f]
+  (preduce f val xs))
+
 (defn conji [m x]
   (if-let [i (:i x)]
     (assoc m i x)

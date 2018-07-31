@@ -20,6 +20,7 @@
 (def dtsz (* tsz 2))
 (def halftsz (/ tsz 2))
 (def quarttsz (/ tsz 4))
+(def hp-offset (+ halftsz 10))
 
 (def isz 32)
 
@@ -159,7 +160,7 @@
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [mp (get-map-part world pfoo (plus [1 1] (round (div size tsz ))))]
+        (let [mp (get-map-part world pfoo (plus [1 1] (round (div size halftsz))))]
           (doseq [{:keys [p ground type]} (sort-by :p mp)]
             (if-let [tex (txtr ground)]
               (draw-double-tiles! gl tex [p]))
@@ -183,7 +184,22 @@
           (set-color! gl 250 20 25)
           (fill-rects! gl (for [tile mp
                                 :when (:broken tile)]
-                            [(minus (->gui (:p tile)) [halftsz halftsz]) [(* (broken-progress tile) tsz) 5]]))
+                            [(minus (->gui (:p tile)) [halftsz hp-offset]) [(* (broken-progress tile) tsz) 5]]))
+
+          (fill-rects! gl (for [tile mp
+                                :when (and (not (:broken tile))
+                                           (:hp tile))]
+                            [(minus (->gui (:p tile)) [halftsz hp-offset]) [tsz 5]]))
+          (fill-rects! gl (for [zb (vals zombies)]
+                            [(minus (->gui (:p zb)) [quarttsz hp-offset]) [halftsz 5]]))
+          (set-color! gl 40 120 20)
+          (fill-rects! gl (for [tile mp
+                                :when (and (not (:broken tile))
+                                           (:hp tile))]
+                            [(minus (->gui (:p tile)) [halftsz hp-offset]) [(* (health-fraction tile) tsz) 5]]))
+
+          (fill-rects! gl (for [zb (vals zombies)]
+                            [(minus (->gui (:p zb)) [quarttsz hp-offset]) [(* (health-fraction zb) halftsz) 5]]))
           (set-color! gl 220 180 20)
           (draw-lines! gl (for [pp (cons p path)]
                             (->gui pp)))
@@ -321,7 +337,8 @@
                           (add-plcmd [:build build]))
                         (add-plcmd [:move-item]))
     KeyEvent/VK_0 (save!)
-    KeyEvent/VK_ESCAPE (System/exit 0)
+    KeyEvent/VK_Q (if (= (.getModifiers e) KeyEvent/CTRL_MASK)
+                    (System/exit 0))
     nil))
 
 (def size (ref [0 0]))
@@ -350,7 +367,7 @@
                            'thread 'fur 'axe 'chest 'shrub-pear 'granite 'granite-floor
                            'rock 'stone 'spear 'campfire-on 'campfire-off 'campfire-empty
                            'bunny 'deadbunny 'zombie 'player 'trunk 'hands 'pear 'lumberjack
-                           'idol]))))
+                           'idol 'gold 'wood]))))
 
 (defn create-gui []
   (let [can (doto (GLCanvas.)

@@ -22,6 +22,10 @@
                         :granite-floor 1
                         :tall-grass 1.3})
 
+(def +step-size+ {:player 0.015
+                  :lumberjack-being 0.01
+                  :zombie 0.006})
+
 (def zombie-walk-speeds (map-kv (fn [_ v]
                                   (* v 2))
                                 human-walk-speeds))
@@ -32,6 +36,7 @@
 
 (def work-times {:tree (seconds 9)
                  :idol (minutes 0.5)
+                 :zombie (seconds 2)
                  :lumberjack (seconds 2)
                  :lumberjack-being (seconds 0.5)})
 
@@ -39,6 +44,9 @@
 
 (def *broken* {:lumberjack 5
                :idol 13})
+
+(def +hp+ {:idol 9
+           :zombie 8})
 
 ;(def places [:dirt :grass :tall-grass])
 

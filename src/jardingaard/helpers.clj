@@ -39,6 +39,9 @@
   ([object]
    (= (spawn-progress object) 1)))
 
+(defn health-fraction [{:keys [type hp]}]
+  (/ hp (+hp+ type)))
+
 (defn walkable? [tt]
   (or (not tt) (= :door tt)))
 
@@ -73,11 +76,11 @@
     (or (walk-speeds (:ground (world p)))
         2)))
 
-(defn new-pos [{:keys [p path] :as entity} p->ws]
+(defn new-pos [{:keys [p path type] :as entity} p->ws]
   (if (first path)
     (loop [p p
            [next-pos & rest-path :as path] path
-           energy 0.01]
+           energy (+step-size+ type)]
       (if (and next-pos (> energy 0))
         (let [ws (p->ws (round2 p))
               needed-energy (* (distance p next-pos) ws)]

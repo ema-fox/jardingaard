@@ -85,6 +85,7 @@
     (alter messages update-in [origin-t] conj
            [:new-player pid
             {:i pid
+             :type :player
              :inventar [[:hands 1] [:pickaxe 1] [:dirt 1]]
              :inventar-p 0
              :inventar-category-p :inventar

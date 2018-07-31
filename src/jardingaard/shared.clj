@@ -84,13 +84,14 @@
   (update state :zombies
           (fn [zombies]
             (map-kv (fn [i zb]
-                      (new-pos zb (comp (if (some #(and (< (distance (:p %) (:p zb))
-                                                           0.5)
-                                                        (< (:i %) (:i zb)))
-                                                   (vals zombies))
-                                          #(* % 0.5)
-                                          identity)
-                                        (make-p->ws zombie-walk-speeds world))))
+                      (let [p->ws (make-p->ws zombie-walk-speeds world)
+                            newzb (new-pos zb p->ws)]
+                        (if (some #(let [d (distance (:p %) (:p zb))]
+                                     (and (< d 0.5)
+                                          (< (distance (:p %) (:p newzb)) d)))
+                                  (vals zombies))
+                          (new-pos zb (comp #(* 2 %) p->ws))
+                          newzb)))
                     zombies))))
 
 (defn add-items [items x n]
@@ -105,19 +106,25 @@
   (key-> player :inventar (add-items x n)))
 
 (defstep [arrows]
-  (let [state (preduce (fn [state arrow]
-                         (if-let [target ((:zombies state) (:target arrow))]
-                           (if (< (distance (:p arrow) (:p target)) arrow-speed)
-                             (-> (update state :zombies dissoc (:target arrow))
-                                 (update-in [:players (:owner arrow)] give-player :gold 1))
-                             (update state :arrows conji (update arrow :p plus (mult (direction (:p arrow) (:p target)) arrow-speed))))))
-                      state
-                      (vals arrows))]
-    (preduce (fn [state arrow]
-               (if-not ((:zombies state) (:target arrow))
-                 (update state :arrows dissoc (:i arrow))))
-            state
-            (vals arrows))))
+  (as-> state
+        state
+        (updates state (vals arrows)
+                 (fn [state arrow]
+                   (let [target ((:zombies state) (:target arrow))]
+                     (if (< (distance (:p arrow) (:p target)) arrow-speed)
+                       (-> (update-in state [:zombies (:target arrow) :hp] dec)
+                           (update :arrows dissoc (:i arrow))
+                           (assoc-in [:zombies (:target arrow) :last-hit] (:owner arrow)))
+                       (update state :arrows conji (update arrow :p plus (mult (direction (:p arrow) (:p target)) arrow-speed)))))))
+        (updates state (vals (:zombies state))
+                 (fn [state zb]
+                   (if (<= (:hp zb) 0)
+                     (-> (update state :zombies dissoc (:i zb))
+                         (update-in [:players (:last-hit zb)] give-player :gold 1)))))
+        (updates state (vals (:arrows state))
+                 (fn [state arrow]
+                   (if-not ((:zombies state) (:target arrow))
+                     (update state :arrows dissoc (:i arrow)))))))
 
 (defn find-tree [world pa pb]
   (->> (get-map-part world pa [4 4])
@@ -164,11 +171,19 @@
   (preduce (fn [{:keys [world] :as state} zb]
              (let [p (round2 (:p zb))
                    tile (world p)]
-               (if (and (= (:type tile) :idol)
+               (if (and (ready? zb)
+                        (= (:type tile) :idol)
                         (not (:broken tile)))
-                 (update-in state [:world p] assoc
-                            :broken (*broken* :idol)
-                            :merit 0))))
+                 (-> (update-in state [:world p] (fn [idol]
+                                                   (let [newhp (dec (:hp idol))]
+                                                     (if (<= newhp 0)
+                                                       (assoc idol
+                                                         :hp (+hp+ :idol)
+                                                         :broken (*broken* :idol)
+                                                         :merit 0)
+                                                       (assoc idol
+                                                         :hp newhp)))))
+                     (assoc-in [:zombies (:i zb) :spawn] *tick*)))))
            state
            (filter (comp not walking?) (vals zombies))))
 
@@ -274,6 +289,8 @@
                          :spawn *tick*)
               (cond-> (= :idol selected)
                       (update-in [:world tilep] assoc :merit 0)
+                      (+hp+ selected)
+                      (update-in [:world tilep] assoc :hp (+hp+ selected))
                       (*broken* selected)
                       (update-in [:world tilep] assoc :broken (*broken* selected)))
               (update-in [:players pid] steal-player selected 1))
@@ -287,6 +304,9 @@
           (and (= :wood selected) (:broken tile))
           (-> (update-in state [:world tilep :broken] (comp nil0 dec))
               (assoc-in [:world tilep :spawn] *tick*)
+              (update-in [:players pid] steal-player :wood 1))
+          (and (= :wood selected) (:hp tile) (< (health-fraction tile) 1))
+          (-> (update-in state [:world tilep :hp] inc)
               (update-in [:players pid] steal-player :wood 1))
           true
           state)))
@@ -345,15 +365,25 @@
                (and (= :idol (:type tile))
                     (ready? tile)
                     (< 0 (:merit tile))
-                    (-> (reduce (fn [state _]
-                                  (update state :zombies conji
-                                          {:p (plus (:p tile) [4 4])
-                                           :goal (:p tile)
-                                           :type :zombie
-                                           :spawn *tick*
-                                           :path (route2 (plus (:p tile) [4 4]) (:p tile) (make-p->ws zombie-walk-speeds world))}))
-                                state (range (:merit tile)))
-                        (assoc-in [:world (:p tile) :spawn] *tick*))))
+                    (let [arc (mod (prng *tick* (:p tile) (:merit tile)) tau)
+                          dira (mult (dir<-arc arc) 2)
+                          dirb (mult (dir<-arc (+ arc (/ tau 4))) 0.3)
+                          spawn-points (map #(loop [p (plus (mult dirb %) (:p tile))]
+                                               (if (:ground (world (round2 p)))
+                                                 (recur (plus p dira))
+                                                 p))
+                                            (range (:merit tile)))]
+                      (-> (reduce (fn [state p]
+                                    (update state :zombies conji
+                                            {:p p
+                                             :goal (:p tile)
+                                             :type :zombie
+                                             :spawn *tick*
+                                             :hp (+hp+ :zombie)
+                                             :path (route2 p (:p tile) (make-p->ws zombie-walk-speeds world))}))
+                                  state
+                                  spawn-points)
+                          (assoc-in [:world (:p tile) :spawn] *tick*)))))
              state
              tiles)))
 
