@@ -106,7 +106,7 @@
 (defn -main [& [^String host]]
   (def conn (loop []
               (if-let [c (try
-                           (doto (Socket. (or host "soupwhale.com") 8282)
+                           (doto (Socket. (or host "zopf.hopto.org") 8282)
                              (.setTcpNoDelay true))
                            (catch java.net.ConnectException e
                              (Thread/sleep 1000)

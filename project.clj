@@ -5,5 +5,6 @@
                  [quil/jogl-all-fat "2.3.2"]
                  [quil/gluegen-rt-fat "2.3.2"]
                  [seesaw "1.4.4"]]
-  :main jardingaard.standalone
-  :aot [jardingaard.standalone])
+  :main jardingaard.client
+  :aot [jardingaard.standalone
+        jardingaard.client])
