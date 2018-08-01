@@ -1,5 +1,4 @@
 (ns jardingaard.shared
-  ;(:require [jardingaard zombie])
   (:use [jardingaard util reducers rules helpers]))
 
 (def tick-duration 16)
@@ -25,20 +24,6 @@
           (for [a0 (range (- p0 d) (+ 1 p0 d))
                 a1 (range (- p1 d) (+ 1 p1 d))]
             [a0 a1])))
-
-#_(defstep [bunnies bworld]
-  (let [[nbworld nbs]
-        (ttmap (fn [bworld {:keys [p path] :as bunny}]
-                 (if (and (not (first path))
-                          (= :tall-grass (get-in-map bworld (round p))))
-                   [(assoc-in-map bworld (round p) :grass)
-                    (update-in bunny [:energy] (partial + 200))]
-                   [bworld bunny]))
-               bworld
-               bunnies)]
-    (assoc state
-      :bworld nbworld
-      :bunnies (vec nbs))))
 
 #_(defstep []
   (key->> state :bunnies
@@ -139,7 +124,7 @@
 
 (defstep [lumberjacks]
   (reduce (fn [{:keys [world] :as state} lj]
-            (let [p (round2 (:p lj))
+            (let [p (->tilep (:p lj))
                   tile (world p)]
               (cond (= (:home lj) p)
                     (cond-> (update state :lumberjacks dissoc (:i lj))
@@ -169,7 +154,7 @@
 
 (defstep [zombies]
   (preduce (fn [{:keys [world] :as state} zb]
-             (let [p (round2 (:p zb))
+             (let [p (->tilep (:p zb))
                    tile (world p)]
                (if (and (ready? zb)
                         (= (:type tile) :idol)
@@ -192,7 +177,7 @@
              (if-let [targets (and (ready? (:arrow-spawn player) 20)
                                    (seq (filter #(< (distance (:p player) (:p %)) 8)
                                                 (vals zombies))))]
-               (let [target (prng-nth targets *tick* (round2 (:p player)) pid)]
+               (let [target (prng-nth targets *tick* (->tilep (:p player)) pid)]
                  (-> (update state :arrows conji {:p (:p player)
                                                   :owner pid
                                                   :target (:i target)})
@@ -211,21 +196,6 @@
     (assoc state
       :bullets (vec bus)
       :players (into {} pls))))
-
-#_(defstep [bworld players]
-   (assoc state
-    :bworld (reduce (fn [bw pl]
-                     (let [tilep (round (:p pl))
-                           succ ({:tall-grass :grass
-                                  :grass :dirt}
-                                 (get-in-map bw tilep))]
-                       (if (and succ
-                                (= 0 (mod (apply bit-xor *tick* tilep)
-                                          9)))
-                         (assoc-in-map bw tilep succ)
-                         bw)))
-                   bworld
-                   (vals players))))
 
 (defn walk [{:keys [world players] :as state} pid p]
   (let [pp (get-in players [pid :p])
@@ -251,7 +221,7 @@
 (defn shot [state pid goalp]
   (let [{:keys [p inventar inventar-p]} (get-in state [:players pid])
         selected (first (nth inventar inventar-p))
-        tilep (round2 goalp)
+        tilep (->tilep goalp)
         tile ((:world state) tilep)]
     (cond (= :gun selected)
           (update-in state [:bullets] conj (let [m (direction p goalp)]
@@ -315,7 +285,7 @@
   (assoc state
     :players (reduce (fn [ps [pid player]]
                        (if-let [beneficary (and (ready? (:gold-spawn player) (seconds 10))
-                                                (:owner (world (round2 (:p player)))))]
+                                                (:owner (world (->tilep (:p player)))))]
                          (-> (assoc-in ps [pid :gold-spawn] *tick*)
                              (update-in [beneficary :inventar] add-items :gold 1))
                          ps))
@@ -369,7 +339,7 @@
                           dira (mult (dir<-arc arc) 2)
                           dirb (mult (dir<-arc (+ arc (/ tau 4))) 0.3)
                           spawn-points (map #(loop [p (plus (mult dirb %) (:p tile))]
-                                               (if (:ground (world (round2 p)))
+                                               (if (:ground (world (->tilep p)))
                                                  (recur (plus p dira))
                                                  p))
                                             (range (:merit tile)))]

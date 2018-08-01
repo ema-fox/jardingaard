@@ -114,7 +114,7 @@
 (defn floor2 [x]
   (* (floor (* x 0.5)) 2))
 
-(defn round2 [p]
+(defn ->tilep [p]
   (mult (round (mult p 0.5)) 2))
 
 (defn mult2 [[pa0 pa1] [pb0 pb1]]

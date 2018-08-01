@@ -152,7 +152,7 @@
   (let [{:keys [players bullets world c-sites bunnies deadbunnies zombies chests tick lumberjacks arrows]} (current-state)]
     (binding [*tick* tick]
     (when (get players @hello)
-      (let [pfoo (round2 (get-in players [@hello :p]))
+      (let [pfoo (->tilep (get-in players [@hello :p]))
             offset (minus (mult size 0.5) (->gui (get-in players [@hello :p])))
             {:keys [p path]} (players @hello)]
         (prepare-gl! gl offset size)
@@ -160,15 +160,15 @@
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [mp (get-map-part world pfoo (plus [1 1] (round (div size halftsz))))]
+        (let [mp (get-map-part world pfoo (plus [1 1] (->tilep (div size halftsz))))]
           (doseq [{:keys [p ground type]} (sort-by :p mp)]
             (if-let [tex (txtr ground)]
               (draw-double-tiles! gl tex [p]))
             (if-let [tex (txtr type)]
               (draw-double-tiles! gl tex [p]))
-            (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals players))))
-            (draw-beings! gl (txtr :player) (filter #(= p (round2 %)) (map :p (vals lumberjacks))))
-            (draw-beings! gl (txtr :zombie) (filter #(= p (round2 %)) (map :p (vals zombies)))))
+            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p (vals players))))
+            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p (vals lumberjacks))))
+            (draw-beings! gl (txtr :zombie) (filter #(= p (->tilep %)) (map :p (vals zombies)))))
           #_(draw-beings! gl (txtr :bunny) (map :p bunnies))
           #_(draw-beings! gl (txtr :deadbunny) (map :p deadbunnies))
           (.glDisable gl GL2/GL_TEXTURE_2D)

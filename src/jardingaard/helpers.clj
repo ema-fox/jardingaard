@@ -82,7 +82,7 @@
            [next-pos & rest-path :as path] path
            energy (+step-size+ type)]
       (if (and next-pos (> energy 0))
-        (let [ws (p->ws (round2 p))
+        (let [ws (p->ws (->tilep p))
               needed-energy (* (distance p next-pos) ws)]
           (if (> needed-energy energy)
             (recur (plus p (mult (direction p next-pos)
@@ -126,7 +126,7 @@
                       [1 1]])))
 
 (defn barneighbors [p]
-  (map #(plus (round2 p) %) [[-1 0]
+  (map #(plus (->tilep p) %) [[-1 0]
                              [0 1]
                              [1 0]
                              [0 -1]]))
@@ -138,18 +138,18 @@
 (defn candidates [p [ps d h] goal ns p->ws]
   (into {} (for [n ns]
              [n [(cons n ps)
-                 (+ d (* (p->ws (round2 (half-point p n)))
+                 (+ d (* (p->ws (->tilep (half-point p n)))
                          (distance p n)))
                  (distance n goal)]])))
 
 (defn route2 [start goal p->ws]
-  (if (= (round2 start) (round2 goal))
+  (if (= (->tilep start) (->tilep goal))
     [goal]
     (loop [open (candidates start [() 0 (distance start goal)] goal (barneighbors start) p->ws)
            closed #{}]
       (let [[closest info] (first (sort-by evaluate open))]
         (reverse (first info))
-        (if ((set (barneighbors (round2 goal))) closest)
+        (if ((set (barneighbors (->tilep goal))) closest)
           (reverse (conj (first info) goal))
           (recur (merge-with (fn [a b]
                                (if (< (evaluate2 a) (evaluate2 b))
