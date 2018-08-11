@@ -13,8 +13,7 @@
   (map? (:players state)))
 
 (defn check-players-p [state]
-  (every? :p (vals (:players state)))
-  (every? :p (vals (:lumberjacks state))))
+  (every? :p (vals (:players state))))
 
 (defmacro defstep [args & body]
   `(dosync (alter step-fns conj (fn [{:keys ~args :as ~'state}]
@@ -41,6 +40,16 @@
 
 (defn health-fraction [{:keys [type hp]}]
   (/ hp (+hp+ type)))
+
+(defn ->tilep [p]
+  (mult (round (mult p 0.25)) 4))
+
+(defn ->blp [p]
+  (-> (minus p [1 1])
+      (mult 0.5)
+      (round)
+      (mult 2)
+      (plus [1 1])))
 
 (defn walkable? [tt]
   (or (not tt) (= :door tt)))
@@ -104,32 +113,23 @@
   (+ (Math/abs (int (- a0 b0)))
      (Math/abs (int (- a1 b1)))))
 
-(defn unchecked-ngbrs [p]
-  [(plus p [0 1])
-   (plus p [0 -1])
-   (plus p [1 0])
-   (plus p [-1 0])])
-
-(defn ngbrs [p w]
-  (filter w (unchecked-ngbrs p)))
-
 (defrecord path-stub [ps d h])
 
 (defn fooneighbors [p]
-  (if (odd? (second p))
+  (if (= 2 (mod (second p) 4))
     (map reverse (fooneighbors (reverse p)))
-    (map #(plus % p) [[2 0]
-                      [1 -1]
-                      [-1 -1]
-                      [-2 0]
-                      [-1 1]
-                      [1 1]])))
+    (map #(plus % p) [[4 0]
+                      [2 -2]
+                      [-2 -2]
+                      [-4 0]
+                      [-2 2]
+                      [2 2]])))
 
 (defn barneighbors [p]
-  (map #(plus (->tilep p) %) [[-1 0]
-                             [0 1]
-                             [1 0]
-                             [0 -1]]))
+  (map #(plus (->tilep p) %) [[-2 0]
+                             [0 2]
+                             [2 0]
+                             [0 -2]]))
 
 (defn evaluate2 [[_ a b]] (+ a b))
 
@@ -161,27 +161,6 @@
                                          p->ws))
                  (conj closed closest)))))))
 
-#_(defn rand-spawnpoint [{:keys [bworld mworld spawn-point]}]
-  (first (concat (filter #(and (not (get-in-map mworld %))
-                               (= :tall-grass (get-in-map bworld %)))
-                         (for [_ (range 50)]
-                           (map rand-int spawn-point)))
-                 [spawn-point])))
-
-(defn step-bullets&entities [f pf bullet-speed bus entities]
-  (ttmap (fn [bullets entity]
-           (let [p (pf entity)
-                 newbullets
-                 (filter (fn [{bp :p m :m}]
-                           (< 0.5 (distance p (p-on-line bp
-                                                         (plus bp (mult m bullet-speed))
-                                                         p))))
-                         bullets)]
-             [newbullets
-              (f entity (- (count bullets) (count newbullets)))]))
-         bus
-         entities))
-
 (defn harm-player [{:keys [hp died] :as player} damage spawn-point]
   (let [newhp (- hp damage)]
     (if (< newhp 1)
@@ -193,16 +172,5 @@
       (assoc player
         :hp newhp))))
 
-(defn process-bullets [{:keys [bullets bullet-speed] :as state} key]
-  (step-bullets&entities (fn [entity damage]
-                           (if (< 0 damage)
-                             (assoc entity
-                               :dead true)
-                             entity))
-                         :p
-                         bullet-speed
-                         bullets
-                         (state key)))
-
 (defn get-map-part [world p s]
-  (map-part world (minus p s) (mult s 2)))
+  (map-part world (minus p s) (mult s 4)))

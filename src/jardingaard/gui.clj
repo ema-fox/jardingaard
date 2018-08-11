@@ -18,6 +18,7 @@
 
 (def tsz 128)
 (def dtsz (* tsz 2))
+(def qtsz (* tsz 4))
 (def halftsz (/ tsz 2))
 (def quarttsz (/ tsz 4))
 (def hp-offset (+ halftsz 10))
@@ -117,9 +118,12 @@
   (draw-rects! gl tex (for [p tiles]
                         [(minus (->gui p) [quarttsz halftsz]) [halftsz halftsz]])))
 
+(defn draw-building! [gl tex p]
+  (draw-rects! gl tex [[(minus (->gui p) [tsz (+ halftsz tsz)]) [dtsz dtsz]]]))
+
 (defn draw-double-tiles! [gl tex tiles]
   (draw-rects! gl tex (for [p tiles]
-                        [(minus (->gui p) [tsz (+ halftsz tsz)]) [dtsz dtsz]])))
+                        [(minus (->gui p) [dtsz (+ tsz dtsz)]) [qtsz qtsz]])))
 
 (defn fill-rects! [^GL2 gl rects]
   (let [nrects (count rects)]
@@ -149,7 +153,7 @@
    (ref-set fr-ts (conj (take 50 @fr-ts) (.getTime (Date.)))))
   (.glClearColor gl 0.5 0.5 0.5 1)
   (.glClear gl GL/GL_COLOR_BUFFER_BIT)
-  (let [{:keys [players bullets world c-sites bunnies deadbunnies zombies chests tick lumberjacks arrows]} (current-state)]
+  (let [{:keys [players bullets world buildings zombies chests tick lumberjacks carpenters arrows]} (current-state)]
     (binding [*tick* tick]
     (when (get players @hello)
       (let [pfoo (->tilep (get-in players [@hello :p]))
@@ -160,59 +164,58 @@
         (.glEnable gl GL2/GL_TEXTURE_2D)
         (.glEnableClientState gl GL2/GL_VERTEX_ARRAY)
         (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
-        (let [mp (get-map-part world pfoo (plus [1 1] (->tilep (div size halftsz))))]
-          (doseq [{:keys [p ground type]} (sort-by :p mp)]
+        (let [mp (get-map-part world pfoo (plus [1 1] (->tilep (div size halftsz))))
+              bp (get-map-part buildings pfoo (plus [1 1] (->tilep (div size halftsz))))]
+          (doseq [{:keys [p ground]} (sort-by :p mp)]
             (if-let [tex (txtr ground)]
               (draw-double-tiles! gl tex [p]))
-            (if-let [tex (txtr type)]
-              (draw-double-tiles! gl tex [p]))
+            (doseq [bl (->> (map-part buildings p [2 2])
+                            (sort-by :p))]
+              (if-let [tex (txtr (:type bl))]
+                (draw-building! gl tex (:p bl))))
             (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p (vals players))))
-            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p (vals lumberjacks))))
-            (draw-beings! gl (txtr :zombie) (filter #(= p (->tilep %)) (map :p (vals zombies)))))
+            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p lumberjacks)))
+            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p carpenters)))
+            (draw-beings! gl (txtr :zombie) (filter #(= p (->tilep %)) (map :p zombies))))
           #_(draw-beings! gl (txtr :bunny) (map :p bunnies))
           #_(draw-beings! gl (txtr :deadbunny) (map :p deadbunnies))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (set-color! gl 90 40 25)
-          (doseq [a (vals arrows)]
+          (doseq [a arrows]
             (draw-lines! gl [(minus (->gui (:p a)) [0 quarttsz])
                              (minus (->gui (plus (:p a) (mult (direction (:p a) (:p (zombies (:target a)))) 0.1))) [0 quarttsz])]))
           (set-color! gl 250 220 25)
-          (fill-rects! gl (for [tile mp
+          (fill-rects! gl (for [tile bp
                                 :when (:type tile)]
                             [(minus (->gui (:p tile)) [halftsz halftsz]) [(* (spawn-progress tile) tsz) 5]]))
           (set-color! gl 250 20 25)
-          (fill-rects! gl (for [tile mp
+          (fill-rects! gl (for [tile bp
                                 :when (:broken tile)]
                             [(minus (->gui (:p tile)) [halftsz hp-offset]) [(* (broken-progress tile) tsz) 5]]))
 
-          (fill-rects! gl (for [tile mp
+          (fill-rects! gl (for [tile bp
                                 :when (and (not (:broken tile))
                                            (:hp tile))]
                             [(minus (->gui (:p tile)) [halftsz hp-offset]) [tsz 5]]))
-          (fill-rects! gl (for [zb (vals zombies)]
+          (fill-rects! gl (for [zb zombies]
                             [(minus (->gui (:p zb)) [quarttsz hp-offset]) [halftsz 5]]))
           (set-color! gl 40 120 20)
-          (fill-rects! gl (for [tile mp
+          (fill-rects! gl (for [tile bp
                                 :when (and (not (:broken tile))
                                            (:hp tile))]
                             [(minus (->gui (:p tile)) [halftsz hp-offset]) [(* (health-fraction tile) tsz) 5]]))
 
-          (fill-rects! gl (for [zb (vals zombies)]
+          (fill-rects! gl (for [zb zombies]
                             [(minus (->gui (:p zb)) [quarttsz hp-offset]) [(* (health-fraction zb) halftsz) 5]]))
           (set-color! gl 220 180 20)
           (draw-lines! gl (for [pp (cons p path)]
                             (->gui pp)))
-          #_(fill-rects! gl (for [{:keys [p t]} c-sites]
-                            [(mult p tsz) [(inc (* t 0.3)) 5]]))
-          (set-color! gl 0 0 0)
-          #_(fill-rects! gl (for [{p :p} bullets]
-                            [(plus [12 12] (mult p tsz)) [5 5]]))
           (.glTranslatef gl (- 0 (first offset)) (- 0 (second offset)) 0)
           (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
           (.beginRendering rnd (first size) (second size))
           (.setColor rnd 1 1 0.5 1)
-          (doseq [{:keys [type merit p]} mp
+          (doseq [{:keys [type merit p]} bp
                   :when (= type :idol)]
             (draw-string! rnd (str merit) (minus (plus (->gui p) offset) [20 tsz]) size))
           (doseq [[pid {:keys [p merit name]}] players]
@@ -367,7 +370,7 @@
                            'thread 'fur 'axe 'chest 'shrub-pear 'granite 'granite-floor
                            'rock 'stone 'spear 'campfire-on 'campfire-off 'campfire-empty
                            'bunny 'deadbunny 'zombie 'player 'trunk 'hands 'pear 'lumberjack
-                           'idol 'gold 'wood]))))
+                           'idol 'gold 'wood 'tower 'carpenter]))))
 
 (defn create-gui []
   (let [can (doto (GLCanvas.)

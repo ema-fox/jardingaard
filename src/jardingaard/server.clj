@@ -1,6 +1,6 @@
 (ns jardingaard.server
   (:refer-clojure :exclude [read read-string])
-  (:use [jardingaard util shared reducers rules helpers backend]
+  (:use [jardingaard util shared reducers rules helpers backend field]
         clojure.edn
         clojure.java.io)
   (:import [java.net ServerSocket Socket]

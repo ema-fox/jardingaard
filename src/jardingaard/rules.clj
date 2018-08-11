@@ -24,28 +24,37 @@
 
 (def +step-size+ {:player 0.015
                   :lumberjack-being 0.01
-                  :zombie 0.006})
+                  :carpenter-being 0.01
+                  :zombie 0.01})
 
 (def zombie-walk-speeds (map-kv (fn [_ v]
                                   (* v 2))
                                 human-walk-speeds))
 
-(def placable #{:wall :windowed-wall :door :rock :chest :tree :lumberjack :idol})
+(def placable #{:wall :windowed-wall :door :rock :chest :tree :lumberjack :idol :tower :carpenter})
 
 (def grounds #{:dirt :water :grass :tall-grass})
 
 (def work-times {:tree (seconds 9)
                  :idol (minutes 0.5)
                  :zombie (seconds 2)
+                 :tower (seconds 0.5)
+                 :carpenter (seconds 2)
+                 :carpenter-being (seconds 0.5)
                  :lumberjack (seconds 2)
                  :lumberjack-being (seconds 0.5)})
 
 (def object-fruits {:tree :wood})
 
-(def *broken* {:lumberjack 5
+(def *broken* {:carpenter 11
+               :lumberjack 5
+               :tower 8
                :idol 13})
 
-(def +hp+ {:idol 9
+(def +hp+ {:carpenter 8
+           :lumberjack 3
+           :tower 5
+           :idol 9
            :zombie 8})
 
 ;(def places [:dirt :grass :tall-grass])
@@ -83,8 +92,11 @@
 (def recipes {[:windowed-wall] {:wall 1
                                 :twig 5}
               [:tree] {:gold 3}
+              [:carpenter] {:gold 2
+                            :wood 11}
               [:lumberjack] {:gold 5
                              :wood 3}
+              [:tower] {:wood 8 :gold 2}
               [:idol] {:gold 12 :wood 38}
               [:water] {:gold 23}
               [:dirt] {:gold 1}

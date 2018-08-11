@@ -1,5 +1,5 @@
 (ns jardingaard.worldgen
-  (:use [jardingaard helpers reducers util]))
+  (:use [jardingaard helpers reducers util field]))
 
 (defn tile-type [xs] ;[height vegetation]
   (let [ys (map #(int (* 4.99 %)) xs)]
@@ -20,13 +20,11 @@
   (reduce (fn [st f]
             (f st))
           {:players {}
-           :lumberjacks {}
-           :zombies {}
-           :arrows {}
-           :c-sites []
-           :bunnies []
-           :deadbunnies []
-           :chests {}
+           :lumberjacks (field)
+           :carpenters (field)
+           :zombies (field)
+           :arrows (field)
            :spawn-point [(/ world-size 2) (/ world-size 2)]
+           :buildings {}
            :world {}}
           @gen-fns))

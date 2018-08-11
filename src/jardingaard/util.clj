@@ -29,10 +29,11 @@
        m))
 
 (defn map-kv [f coll]
-  (persistent! (reduce-kv (fn [acc key value]
-                            (assoc! acc key (f key value)))
-                          (transient (empty coll))
-                          coll)))
+  (if coll
+    (persistent! (reduce-kv (fn [acc key value]
+                              (assoc! acc key (f key value)))
+                            (transient (empty coll))
+                            coll))))
 
 (defn ttmap [f y xs]
   (let [foo (reductions (fn [[y _] x]
@@ -67,6 +68,12 @@
 
 (defn updates [val xs f]
   (preduce f val xs))
+
+(defn conj-set
+  ([s x]
+   (conj (or s #{}) x))
+  ([s x & xs]
+   (apply conj (conj-set s x) xs)))
 
 (defn conji [m x]
   (if-let [i (:i x)]
@@ -113,9 +120,6 @@
 
 (defn floor2 [x]
   (* (floor (* x 0.5)) 2))
-
-(defn ->tilep [p]
-  (mult (round (mult p 0.5)) 2))
 
 (defn mult2 [[pa0 pa1] [pb0 pb1]]
   [(* pa0 pb0) (* pa1 pb1)])
