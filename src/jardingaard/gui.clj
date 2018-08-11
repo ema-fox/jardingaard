@@ -173,7 +173,7 @@
                             (sort-by :p))]
               (if-let [tex (txtr (:type bl))]
                 (draw-building! gl tex (:p bl))))
-            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p (vals players))))
+            (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p players)))
             (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p lumberjacks)))
             (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p carpenters)))
             (draw-beings! gl (txtr :zombie) (filter #(= p (->tilep %)) (map :p zombies))))
@@ -218,7 +218,7 @@
           (doseq [{:keys [type merit p]} bp
                   :when (= type :idol)]
             (draw-string! rnd (str merit) (minus (plus (->gui p) offset) [20 tsz]) size))
-          (doseq [[pid {:keys [p merit name]}] players]
+          (doseq [{:keys [p merit name]} players]
             (draw-string! rnd (str name " - " merit)
                           (minus (plus (->gui p) offset) [20 halftsz]) size))
           (.endRendering rnd)
@@ -232,7 +232,7 @@
           (set-color! gl 50 5 15)
           (fill-rects! gl [[[0 mid1] [20 200]]])
           (set-color! gl 150 15 50)
-          (fill-rects! gl [[[0 mid1] [20 hp]]])
+          (fill-rects! gl [[[0 mid1] [20 (* hp 10)]]])
           (set-color! gl 50 40 5)
           (fill-rects! gl [[[20 mid1] [20 200]]])
           (set-color! gl 150 120 15)

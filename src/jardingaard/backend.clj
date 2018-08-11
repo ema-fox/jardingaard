@@ -4,8 +4,6 @@
         clojure.edn
         [jardingaard worldgen shared helpers util rules field]))
 
-(def maxpid (ref 0))
-
 (def state (ref nil))
 
 (def future-messages (ref {}))
@@ -32,13 +30,17 @@
                                           (first %))
                                      @messages))))
 
-(defn add-player! [pid name]
-  (let [origin-t (first @state)]
-    (alter messages update-in [origin-t] conj
-           [:new-player pid
-            (assoc +new-player+
-              :i pid
-              :name name)])))
+(defn player-id [player-name]
+  (some (fn [{n :name i :i}]
+          (if (= n player-name)
+            i))
+        (get-in @state [1 :players])))
+
+(defn ensure-player! [player-name]
+  (or (player-id player-name)
+      (do (alter state update-in [1 :players] conj
+                 (assoc +new-player+ :name player-name))
+          (player-id player-name))))
 
 (defn load-world! [sp]
   (def save-path sp)
@@ -51,5 +53,4 @@
                                        (slurp save-path))
                           (catch java.io.FileNotFoundException e)))
                       [0 (new-world world-size)]))
-   (println " done.")
-   (alter maxpid #(apply max % (keys (get-in @state [1 :players]))))))
+   (println " done.")))

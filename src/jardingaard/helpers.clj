@@ -12,14 +12,10 @@
 (defn check-players-map [state]
   (map? (:players state)))
 
-(defn check-players-p [state]
-  (every? :p (vals (:players state))))
-
 (defmacro defstep [args & body]
   `(dosync (alter step-fns conj (fn [{:keys ~args :as ~'state}]
                                   {:post [(check-world ~'%)
-                                          (check-players-map ~'%)
-                                          (check-players-p ~' %)]}
+                                          (check-players-map ~'%)]}
                                   ~@body))))
 
 (def ^:dynamic *tick*)

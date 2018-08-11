@@ -19,12 +19,11 @@
 (defn new-world [world-size]
   (reduce (fn [st f]
             (f st))
-          {:players {}
+          {:players (field)
            :lumberjacks (field)
            :carpenters (field)
            :zombies (field)
            :arrows (field)
-           :spawn-point [(/ world-size 2) (/ world-size 2)]
            :buildings {}
            :world {}}
           @gen-fns))

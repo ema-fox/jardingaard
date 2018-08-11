@@ -5,9 +5,9 @@
 
 (defstep [world]
   (update-in state [:players]
-             #(map-kv (fn [pid player]
-                        (new-pos player (make-p->ws human-walk-speeds world)))
-                      %)))
+             #(map-field (fn [player]
+                           (new-pos player (make-p->ws human-walk-speeds world)))
+                         %)))
 
 (defstep [world]
   (update-in state [:lumberjacks]
@@ -181,20 +181,20 @@
                      state
                      (filter ready? (in-radius zombies (:p player) 1))))
           state
-          (vals players)))
+          players))
 
 (defn get-target [p zombies randarg]
   (some-> (seq (in-radius zombies p 8))
           (prng-nth *tick* (->tilep p) randarg)))
 
 (defstep [players zombies]
-  (preduce (fn [state [pid player]]
+  (preduce (fn [state player]
              (if-let [target (and (ready? (:arrow-spawn player) 20)
-                                  (get-target (:p player) zombies pid))]
+                                  (get-target (:p player) zombies (:i player)))]
                (-> (update state :arrows conj {:p (:p player)
-                                               :owner pid
+                                               :owner (:i player)
                                                :target (:i target)})
-                   (assoc-in [:players pid :arrow-spawn] *tick*))))
+                   (assoc-in [:players (:i player) :arrow-spawn] *tick*))))
            state
            players))
 
@@ -270,10 +270,10 @@
 
 (defstep [players world]
   (assoc state
-    :players (reduce (fn [ps [pid player]]
+    :players (reduce (fn [ps player]
                        (if-let [beneficary (and (ready? (:gold-spawn player) (seconds 10))
                                                 (:owner (world (->tilep (:p player)))))]
-                         (-> (assoc-in ps [pid :gold-spawn] *tick*)
+                         (-> (assoc-in ps [(:i player) :gold-spawn] *tick*)
                              (update-in [beneficary :inventar] add-items :gold 1))
                          ps))
                      players
@@ -343,9 +343,9 @@
         (assoc-in [:buildings p :spawn] *tick*))))
 
 (defstep [players buildings]
-  (->> (vals players)
-       (mapcat (fn [player]
-                 (get-map-part buildings (:p player) [4 4])))
+  (->> (mapcat (fn [player]
+                 (get-map-part buildings (:p player) [4 4]))
+               players)
        set
        (filter ready?)
        (preduce step-building state)))
@@ -415,9 +415,7 @@
                :close-chest (assoc-in state [:players pid :open-chest] nil)
                :scrollip (update-in state [:players pid] scrollip (second cmd) state)
                :move-item (move-item state pid)
-               :build (build state pid (second cmd))))
-    :new-player (assoc-in state [:players (second msg)]
-                          (assoc (nth msg 2) :p (:spawn-point state)))))
+               :build (build state pid (second cmd))))))
 
 (defn exec-messages [state msgs]
   (reduce exec-message state msgs))

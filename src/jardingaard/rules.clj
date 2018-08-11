@@ -116,6 +116,7 @@
                       :thread 2}})
 
 (def +new-player+ {:type :player
+                   :p [0 0]
                    :inventar [[:hands 1] [:pickaxe 1] [:dirt 3] [:gold 20]]
                    :inventar-p 0
                    :inventar-category-p :inventar

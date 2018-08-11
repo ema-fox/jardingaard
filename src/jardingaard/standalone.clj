@@ -36,12 +36,8 @@
 
 (defn -main [& [sp]]
   (load-world! sp)
-  (if (= 0 @maxpid)
-    (let [pid (inc @maxpid)]
-      (dosync
-       (add-player! pid "foo")
-       (ref-set hello pid)))
-    (dosync
-     (ref-set hello @maxpid)))
+  (dosync
+   (let [pid (ensure-player! "foo")]
+     (ref-set hello pid)))
   (let [can (create-gui)]
     (steps can)))

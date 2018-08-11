@@ -113,15 +113,6 @@
       (process-msg m pid conn)))
   (purge-conn conn))
 
-(defn ensure-player! [player-name]
-  (or (some (fn [[pid {n :name}]]
-              (if (= n player-name)
-                pid))
-            (get-in @state [1 :players]))
-      (let [pid (alter maxpid inc)]
-        (add-player! pid player-name)
-        pid)))
-
 (defn listen-for-name [conn]
   (let [msgs (reads-socket @conn)
         m (first msgs)]
