@@ -57,9 +57,9 @@
       (min 9 (int (/ (nth (sort pings) 5) 2)))
       0)))
 
-(defn state-for [[c {:keys [bworld mworld players bunnies] :as state}] pid]
-  (let [p (get-in players [pid :p])]
-    [c state]))
+(defn state-for [state pid]
+  ; when the world gets big return only a subset
+  state)
 
 (defn update-clients []
   (doseq [[conn pid] @conns]
@@ -101,7 +101,7 @@
        (alter latest-player-message assoc pid origin-t)
        (alter messages update-in [origin-t] concat cmds)
        (loop []
-         (when (< (first @state) (apply min (vals @latest-player-message)))
+         (when (< (:tick @state) (apply min (vals @latest-player-message)))
            (step!)
            (recur)))
        (update-clients)

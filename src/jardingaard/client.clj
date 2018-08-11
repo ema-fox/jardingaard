@@ -37,30 +37,31 @@
   (send-off fr-counter count-inc)
   (inc c))
 
-(defn step-to [[start st] end msgs]
+(defn step-to [st end msgs]
   (reduce (fn [sta n]
             (binding [*tick* n]
-              (step sta (msgs n))))
+              (step (assoc sta
+                      :tick *tick*)
+                    (msgs n))))
           st
-          (range start end)))
+          (range (:tick st) end)))
 
 (defn current-state2 []
-  (if (and (get-in @state [1 :players @hello])
-           (< (- @fr-counter (first @state)) 40))
-    (assoc (step-to @state @fr-counter (merge-with concat @srv-messages @cl-messages))
-      :tick @fr-counter)))
+  (if (and (get-in @state [:players @hello])
+           (< (- @fr-counter (:tick @state)) 40))
+    (step-to @state @fr-counter (merge-with concat @srv-messages @cl-messages))))
 
 (defn set-dbg-info []
   (swap! dbg-info (constantly (str @fr-counter
                                    " "
                                    (if @state
-                                     (- @fr-counter (first @state))
+                                     (- @fr-counter (:tick @state))
                                      "...")))))
 
 (defn possible-recipes2 []
   (keep (fn [[x r]]
           (if (every? (fn [[y n]]
-                        (player-has? (get-in @state [1 :players @hello]) y n))
+                        (player-has? (get-in @state [:players @hello]) y n))
                       r)
             x))
         recipes))

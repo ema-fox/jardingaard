@@ -4,8 +4,7 @@
   (:import [java.util Date]))
 
 (defn current-state2 []
-  (assoc (second @state)
-    :tick (first @state)))
+  @state)
 
 (defn add-plcmd2 [m]
   (dosync
@@ -14,7 +13,7 @@
 (defn possible-recipes2 []
   (keep (fn [[x r]]
           (if (every? (fn [[y n]]
-                        (player-has? (get-in @state [1 :players @hello]) y n))
+                        (player-has? (get-in @state [:players @hello]) y n))
                       r)
             x))
         recipes))
