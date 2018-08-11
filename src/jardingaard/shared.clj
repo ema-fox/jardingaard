@@ -264,6 +264,7 @@
               (update-in [:players pid] steal-player :gold 1))
           (and (= :wood selected) (repairable-building? bl))
           (-> (update-in state [:buildings blp] repair-building)
+              (assoc-in [:buildings blp :repair-spawn] *tick*)
               (update-in [:players pid] steal-player :wood 1))
           :else
           state)))
@@ -302,7 +303,7 @@
     (if-let [target (and (player-has? (players owner) :wood 1)
                          (->> (get-map-part buildings p [4 4])
                               (filter repairable-building?)
-                              (sort-by :spawn >)
+                              (sort-by #(or (:repair-spawn %) 0) >)
                               first))]
       (-> (assoc-in state [:buildings p :working] true)
           (update-in [:players owner] steal-player :wood 1)
