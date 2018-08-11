@@ -36,19 +36,9 @@
   (let [origin-t (first @state)]
     (alter messages update-in [origin-t] conj
            [:new-player pid
-            {:i pid
-             :type :player
-             :inventar [[:hands 1] [:pickaxe 1] [:dirt 3] [:gold 20]]
-             :inventar-p 0
-             :inventar-category-p :inventar
-             :path nil
-             :name name
-             :died 0
-             :gold-spawn 0
-             :arrow-spawn 0
-             :merit 0
-             :energy 200
-             :hp 200}])))
+            (assoc +new-player+
+              :i pid
+              :name name)])))
 
 (defn load-world! [sp]
   (def save-path sp)

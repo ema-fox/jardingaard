@@ -114,3 +114,15 @@
               [:fur :steak :thread] {:bunny 1}
               [:gun] {:twig 3
                       :thread 2}})
+
+(def +new-player+ {:type :player
+                   :inventar [[:hands 1] [:pickaxe 1] [:dirt 3] [:gold 20]]
+                   :inventar-p 0
+                   :inventar-category-p :inventar
+                   :path nil
+                   :died 0
+                   :gold-spawn 0
+                   :arrow-spawn 0
+                   :merit 0
+                   :energy 200
+                   :hp 20})
