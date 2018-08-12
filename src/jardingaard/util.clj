@@ -16,9 +16,6 @@
          key# ~key]
      (assoc coll# key# (-> (get coll# key#) ~@forms))))
 
-(defmacro key->> [coll key & forms]
-  `(key-> ~coll ~key (->> ~@forms)))
-
 (defn swap-args [f]
   (fn [a b]
     (f b a)))
@@ -35,27 +32,22 @@
                             (transient (empty coll))
                             coll))))
 
-(defn ttmap [f y xs]
-  (let [foo (reductions (fn [[y _] x]
-                          (f y x))
-                        [y] xs)]
-    [(first (last foo))
-     (map second (rest foo))]))
+(defn map-vals [f coll]
+  (map-kv #(f %2) coll))
 
 (defmacro dounroll [[n xs] & body]
   (cons 'do (for [x xs]
               `(let [~n ~x]
                  ~@body))))
 
-(defn assoc-seq [col & keys-vals]
-  (let [keys (butlast keys-vals)
-        vals (last keys-vals)]
-    (into col (map vector keys vals))))
-
 (defn index-by [f xs]
   (first (keep-indexed (fn [i x]
                          (if (f x)
-                           i)))))
+                           i))
+                       xs)))
+
+(defn index-of [x xs]
+  (index-by #{x} xs))
 
 (defn insert-at [i xs x]
   (concat (take i xs) [x] (drop i xs)))
@@ -74,12 +66,6 @@
    (conj (or s #{}) x))
   ([s x & xs]
    (apply conj (conj-set s x) xs)))
-
-(defn conji [m x]
-  (if-let [i (:i x)]
-    (assoc m i x)
-    (let [i (inc (apply max 0 (keys m)))]
-      (assoc m i (assoc x :i i)))))
 
 (defn conjp [m x]
   (if-let [p (:p x)]
@@ -182,6 +168,18 @@
 (defn ^:static dvec<-avec [[a dist]]
   (mult (dir<-arc a) dist))
 
+(defn merge+ [a b]
+  (into {} (filter (fn [[k v]] (not= v 0))
+                   (merge-with + a b))))
+
+(defn flip-bag [bag]
+  (map-vals - bag))
+
+(defn bag>= [big small]
+  (every? (fn [[k v]]
+            (>= (big k 0) v))
+          small))
+
 (defn pairs [xs]
   (map (fn [x y] [x y])
        xs
@@ -189,9 +187,6 @@
 
 (defn nil0 [x]
   (and (not= x 0) x))
-
-(defn alter-in [r key f & args]
-  (alter r assoc key (apply f (get @r key) args)))
 
 (defmacro dbg [& xs]
   `(let [res# ~xs]

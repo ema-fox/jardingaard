@@ -1,6 +1,6 @@
 (ns jardingaard.standalone
   (:gen-class)
-  (:use [jardingaard gui backend shared rules])
+  (:use [jardingaard gui backend shared rules util])
   (:import [java.util Date]))
 
 (defn current-state2 []
@@ -11,12 +11,10 @@
    (add-msg 0 [:plcmd @hello m])))
 
 (defn possible-recipes2 []
-  (keep (fn [[x r]]
-          (if (every? (fn [[y n]]
-                        (player-has? (get-in @state [:players @hello]) y n))
-                      r)
-            x))
-        recipes))
+  (set (keep (fn [[x r]]
+               (if (bag>= (get-in @state [:players @hello :inventar]) r)
+                 x))
+             recipes)))
 
 (config-gui current-state2 add-plcmd2 possible-recipes2
             (fn []

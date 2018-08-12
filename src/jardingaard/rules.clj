@@ -31,7 +31,7 @@
                                   (* v 2))
                                 human-walk-speeds))
 
-(def placable #{:wall :windowed-wall :door :rock :chest :tree :lumberjack :idol :tower :carpenter})
+(def placable #{:tree :lumberjack :idol :tower :carpenter})
 
 (def grounds #{:dirt :water :grass :tall-grass})
 
@@ -89,37 +89,26 @@
                                                           :tile nil}]]))))
 
 
-(def recipes {[:windowed-wall] {:wall 1
-                                :twig 5}
-              [:tree] {:gold 3}
-              [:carpenter] {:gold 2
+(def recipes {:tree {:gold 3}
+              :carpenter {:gold 2
                             :wood 11}
-              [:lumberjack] {:gold 5
+              :lumberjack {:gold 5
                              :wood 3}
-              [:tower] {:wood 8 :gold 2}
-              [:idol] {:gold 12 :wood 38}
-              [:water] {:gold 23}
-              [:dirt] {:gold 1}
-              [:grass] {:dirt 1 :gold 3}
-              [:tall-grass] {:grass 1 :gold 4}
-              [:door] {:twig 13}
-              [:chest] {:trunk 1}
-              [:pickaxe] {:stone 2
-                          :twig 3}
-              [:axe] {:stone 3
-                      :twig 2}
-              [:spear] {:stone 1
-                        :twig 2}
-              [:wall] {:rock 1}
-              [:fur :steak :thread] {:bunny 1}
-              [:gun] {:twig 3
-                      :thread 2}})
+              :tower {:wood 8 :gold 2}
+              :idol {:gold 12 :wood 38}
+              :water {:gold 23}
+              :dirt {:gold 1}
+              :grass {:dirt 1 :gold 3}
+              :tall-grass {:grass 1 :gold 4}})
+
+(def +inventar-slots+ (concat [:hands :pickaxe :gold :wood]
+                              placable
+                              grounds))
 
 (def +new-player+ {:type :player
                    :p [0 0]
-                   :inventar [[:hands 1] [:pickaxe 1] [:dirt 3] [:gold 20]]
-                   :inventar-p 0
-                   :inventar-category-p :inventar
+                   :inventar {:hands 1 :pickaxe 1 :dirt 3 :gold 20}
+                   :inventar-p :hands
                    :path nil
                    :died 0
                    :gold-spawn 0

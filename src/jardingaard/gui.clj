@@ -29,9 +29,8 @@
 
 (def hello (ref nil))
 
-(def build-index (ref nil))
-
-(def build-list (ref nil))
+(def build-mode (ref false))
+(def build-p (ref :dirt))
 
 (def dbg-info (atom nil))
 
@@ -71,8 +70,11 @@
 (defn draw-string! [^TextRenderer rnd ^String s [p0 p1] [s0 s1]]
   (.draw rnd s (int p0) (int (- s1 p1))))
 
-(defn set-color! [^GL2 gl red green blue]
-  (.glColor3f gl (/ red 255.0) (/ green 255.0) (/ blue 255.0)))
+(defn set-color!
+  ([^GL2 gl red green blue]
+   (.glColor3f gl (/ red 255.0) (/ green 255.0) (/ blue 255.0)))
+  ([^GL2 gl red green blue alpha]
+   (.glColor4f gl (/ red 255.0) (/ green 255.0) (/ blue 255.0) (/ alpha 255.0))))
 
 
 (defn prepare-gl! [^GL2 gl trans size]
@@ -177,8 +179,6 @@
             (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p lumberjacks)))
             (draw-beings! gl (txtr :player) (filter #(= p (->tilep %)) (map :p carpenters)))
             (draw-beings! gl (txtr :zombie) (filter #(= p (->tilep %)) (map :p zombies))))
-          #_(draw-beings! gl (txtr :bunny) (map :p bunnies))
-          #_(draw-beings! gl (txtr :deadbunny) (map :p deadbunnies))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (set-color! gl 90 40 25)
@@ -223,11 +223,13 @@
                           (minus (plus (->gui p) offset) [20 halftsz]) size))
           (.endRendering rnd)
           (.glEnableClientState gl GL2/GL_VERTEX_ARRAY))
-        (let [{:keys [inventar inventar-p inventar-category-p open-chest hp energy]}
+        (let [{:keys [inventar inventar-p hp energy]}
               (players @hello)
-              ninventar (count inventar)
+              active-slots (get-active-slots inventar inventar-p)
+              ninventar (count active-slots)
               pa [(- (first size) 40) (- (/ (second size) 2) (* ninventar 20))]
-              bs @build-list
+              receipes (possible-recipes)
+              bs (get-active-slots receipes @build-p)
               mid1 (- (/ (second size) 2) 100)]
           (set-color! gl 50 5 15)
           (fill-rects! gl [[[0 mid1] [20 200]]])
@@ -239,51 +241,42 @@
           (fill-rects! gl [[[20 mid1] [20 energy]]])
           (set-color! gl 20 40 10)
           (fill-rects! gl (cons [pa [40 (* ninventar 40)]]
-                                (if @build-index
+                                (if @build-mode
                                   [[(minus pa [40 0]) [40 (* (count bs) 40)]]])))
           (set-color! gl 40 80 20)
-          (fill-rects! gl [[(plus pa [(if (= inventar-category-p :inventar)
-                                        0
-                                        -40)
-                                      (* inventar-p 40)])
+          (fill-rects! gl [[(plus pa [0 (* (index-of inventar-p active-slots) 40)])
                             [40 40]]])
-          (if @build-index
-            (fill-rects! gl [[(plus pa [-40 (* @build-index 40)]) [40 40]]]))
+          (if @build-mode
+            (fill-rects! gl [[(plus pa [-40 (* (index-of @build-p bs) 40)]) [40 40]]]))
           (.glEnable gl GL2/GL_TEXTURE_2D)
           (.glEnableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (set-color! gl 255 255 255)
           (doseq [i (range ninventar)
-                  :let [tex (txtr (first (nth inventar i)))]
+                  :let [tex (txtr (nth active-slots i))]
                   :when tex]
-            (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [isz isz]]]))
-          (if open-chest
-            (let [items (map first (get chests open-chest))]
-              (doseq [i (range (count items))
-                      :let [tex (txtr (nth items i))]
-                      :when tex]
-                (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [0 (* i 40)]) [isz isz]]]))))
-          (if @build-index
+            (if-not (inventar (nth active-slots i))
+              (set-color! gl 80 80 80))
+            (draw-rects! gl tex [[(plus (plus pa [4 4]) [0 (* i 40)]) [isz isz]]])
+            (if-not (inventar (nth active-slots i))
+              (set-color! gl 255 255 255)))
+          (if @build-mode
             (doseq [i (range (count bs))
-                    :let [cs (nth bs i)]
-                    j (range (count cs))
-                    :let [tex (txtr (nth cs j))]
-                    :when (and tex (some #(= cs %) (possible-recipes)))]
-              (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [(* j -40) (* i 40)]) [isz isz]]])))
+                    :let [tex (txtr (nth bs i))]
+                    :when tex]
+              (if-not (receipes (nth bs i))
+                (set-color! gl 80 80 80))
+              (draw-rects! gl tex [[(plus (plus pa [(- 4 40) 4]) [0 (* i 40)]) [isz isz]]])
+              (if-not (receipes (nth bs i))
+                (set-color! gl 255 255 255))))
           (.glDisable gl GL2/GL_TEXTURE_2D)
           (.glDisableClientState gl GL2/GL_TEXTURE_COORD_ARRAY)
           (.glDisableClientState gl GL2/GL_VERTEX_ARRAY)
           (.beginRendering rnd (first size) (second size))
           (.setColor rnd 1 1 1 1)
           (doseq [i (range ninventar)
-                  :let [n (second (nth inventar i))]
-                  :when (< 1 n)]
+                  :let [n (inventar (nth active-slots i) 0)]
+                  :when (> n 1)]
             (draw-string! rnd (str n) (plus (plus pa [2 35]) [0 (* i 40)]) size))
-          (if open-chest
-            (let [ns (map second (get chests open-chest))]
-              (doseq [i (range (count ns))
-                      :let [n (nth ns i)]
-                      :when (< 1 n)]
-                (draw-string! rnd (str n) (plus (plus pa [2 35]) [-40 (* i 40)]) size))))
           (.setColor rnd 0 0 0 1)
           )
         (.endRendering rnd)))))
@@ -308,13 +301,11 @@
   (.endRendering rnd)
   (.glFlush gl))
 
-(defn scroll [x]
-  (if @build-index
-    (dosync (alter build-index #(let [n (count @build-list)]
-                                  (if (= n 0)
-                                    nil
-                                    (mod (({:inc inc :dec dec :left identity :right identity} x) %) n)))))
-    (add-plcmd [:scrollip x])))
+(defn scroll [direction]
+  (if @build-mode
+    (dosync
+     (alter build-p scroll-items (possible-recipes) direction))
+    (add-plcmd [:scrollip direction])))
 
 (defn mouse-wheeled [e]
   (let [x (.getWheelRotation e)]
@@ -328,17 +319,12 @@
   (condp = (.getKeyCode e)
     KeyEvent/VK_W (scroll :dec)
     KeyEvent/VK_S (scroll :inc)
-    KeyEvent/VK_A (scroll :left)
-    KeyEvent/VK_D (scroll :right)
-    KeyEvent/VK_TAB (if (get-in (current-state) [:players @hello :open-chest])
-                      (add-plcmd [:close-chest])
-                      (dosync
-                       (ref-set build-list (possible-recipes))
-                       (alter build-index #(if % nil 0))))
-    KeyEvent/VK_SPACE (if @build-index
-                        (if-let [build (nth @build-list @build-index)]
-                          (add-plcmd [:build build]))
-                        (add-plcmd [:move-item]))
+    ;KeyEvent/VK_A (scroll :left)
+    ;KeyEvent/VK_D (scroll :right)
+    KeyEvent/VK_TAB (dosync
+                     (alter build-mode not))
+    KeyEvent/VK_SPACE (if @build-mode
+                        (add-plcmd [:build @build-p]))
     KeyEvent/VK_0 (save!)
     KeyEvent/VK_Q (if (= (.getModifiers e) KeyEvent/CTRL_MASK)
                     (System/exit 0))

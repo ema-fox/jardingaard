@@ -105,6 +105,35 @@
 (defn walking? [{:keys [path]}]
   (seq path))
 
+(defn give
+  ([being x]
+   (if (keyword? x)
+     (give being x 1)
+     (update being :inventar merge+ x)))
+  ([being x n]
+   (give being {x n})))
+
+(defn steal
+  ([being x]
+   (if (keyword? x)
+     (steal being x 1)
+     (update being :inventar merge+ (flip-bag x))))
+  ([being x n]
+   (steal being {x n})))
+
+(defn scroll-items [item-p items direction]
+  (let [[front [center & rear]] (split-with (comp not #{item-p})
+                                            (cond-> +inventar-slots+
+                                                    (= :dec direction)
+                                                    reverse))]
+    (some #(and (or (items %)
+                    (= item-p %))
+                %)
+          (concat rear front [center]))))
+
+(defn get-active-slots [items item-p]
+  (filter #(or (items %) (= item-p %)) +inventar-slots+))
+
 (defn manhatten [[a0 a1] [b0 b1]]
   (+ (Math/abs (int (- a0 b0)))
      (Math/abs (int (- a1 b1)))))
@@ -156,17 +185,6 @@
                                                                    (fooneighbors closest))
                                          p->ws))
                  (conj closed closest)))))))
-
-(defn harm-player [{:keys [hp died] :as player} damage spawn-point]
-  (let [newhp (- hp damage)]
-    (if (< newhp 1)
-      (assoc player
-        :hp 200
-        :p (plus spawn-point [(rand-int 5) (rand-int 5)])
-        :path nil
-        :died (inc died))
-      (assoc player
-        :hp newhp))))
 
 (defn get-map-part [world p s]
   (map-part world (minus p s) (mult s 4)))

@@ -59,12 +59,10 @@
                                      "...")))))
 
 (defn possible-recipes2 []
-  (keep (fn [[x r]]
-          (if (every? (fn [[y n]]
-                        (player-has? (get-in @state [:players @hello]) y n))
-                      r)
-            x))
-        recipes))
+  (set (keep (fn [[x r]]
+               (if (bag>= (get-in @state [:players @hello :inventar]) r)
+                 x))
+             recipes)))
 
 (defn connection-lost! []
   (show! (pack! (dialog :content "connection lost" :type :warning)))

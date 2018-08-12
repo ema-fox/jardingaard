@@ -41,17 +41,6 @@
                            zb))
                        zombies))))
 
-(defn add-items [items x n]
-  (if (some #(= (first %) x) items)
-    (mapv #(if (= (first %) x)
-             [x (+ (second %) n)]
-             %)
-          items)
-    (conj items [x n])))
-
-(defn give-player [player x n]
-  (key-> player :inventar (add-items x n)))
-
 (defstep [arrows]
   (as-> state
         state
@@ -67,7 +56,7 @@
                  (fn [state zb]
                    (if (<= (:hp zb) 0)
                      (-> (update state :zombies dissoc (:i zb))
-                         (update-in [:players (:last-hit zb)] give-player :gold 1)))))
+                         (update-in [:players (:last-hit zb)] give :gold)))))
         (updates state (:arrows state)
                  (fn [state arrow]
                    (if-not ((:zombies state) (:target arrow))
@@ -92,7 +81,7 @@
               (cond (= (:home lj) p)
                     (cond-> (update state :lumberjacks dissoc (:i lj))
                             (:inventar lj)
-                            (update-in [:players (:owner tile)] give-player :wood 1)
+                            (update-in [:players (:owner tile)] give :wood)
                             (= (:type bl) :lumberjack)
                             (assoc-in [:buildings p] (assoc bl
                                                        :spawn *tick*
@@ -203,25 +192,10 @@
         path (route2 pp p (make-p->ws human-walk-speeds world))]
     (assoc-in state [:players pid :path] path)))
 
-(defn sub-items [items x n]
-  ;(if-let [i (index-by #(= x (first %)) items)]
-  (vec (keep (fn [y]
-               (if (not= x (first y))
-                 y
-                 (if (>= n (second y))
-                   nil
-                   [x (- (second y) n)])))
-             items)))
-
-(defn steal-player [{:keys [inventar inventar-p] :as player} x n]
-  (let [new-inventar (sub-items inventar x n)]
-    (assoc player
-      :inventar new-inventar
-      :inventar-p (min inventar-p (dec (count new-inventar))))))
-
 (defn shot [state pid goalp]
   (let [{:keys [p inventar inventar-p]} (get-in state [:players pid])
-        selected (first (nth inventar inventar-p))
+        selected (if (inventar inventar-p)
+                   inventar-p)
         tilep (->tilep goalp)
         tile ((:world state) tilep)
         blp (->blp goalp)
@@ -233,16 +207,17 @@
             (-> (update-in state [:world] conjp {:owner pid
                                                  :ground selected
                                                  :p tilep})
-                (update-in [:players pid] steal-player selected 1)
-                (cond-> oldground (update-in [:players pid] give-player oldground 1))))
+                (update-in [:players pid] steal selected)
+                (cond-> oldground (update-in [:players pid] give oldground))))
           (and (= :pickaxe selected)
                (= (:owner tile) pid))
           (if-let [building (:type bl)]
             (-> (update state :buildings dissoc blp)
-                (update-in [:players pid] give-player building 1))
+                (update-in [:players pid] give building))
             (-> (update state :world dissoc tilep)
-                (update-in [:players pid] give-player (:ground tile) 1)))
+                (update-in [:players pid] give (:ground tile))))
           (and (placable selected)
+               (= pid (:owner tile))
                (not bl))
           (-> (update-in state [:buildings blp] assoc
                          :type selected
@@ -254,18 +229,18 @@
                       (update-in [:buildings blp] assoc :hp (+hp+ selected))
                       (*broken* selected)
                       (update-in [:buildings blp] assoc :broken (*broken* selected)))
-              (update-in [:players pid] steal-player selected 1))
+              (update-in [:players pid] steal selected))
           (and (= :hands selected) (:type bl) (ready? bl) (object-fruits (:type bl)))
           (-> (assoc-in state [:buildings blp :spawn] *tick*)
-              (update-in [:players pid] give-player (object-fruits (:type bl)) 1))
+              (update-in [:players pid] give (object-fruits (:type bl))))
           (and (= :gold selected) (= :idol (:type bl)) (not (:broken bl)))
           (-> (update-in state [:buildings blp :merit] inc)
               (update-in [:players pid :merit] inc)
-              (update-in [:players pid] steal-player :gold 1))
+              (update-in [:players pid] steal :gold))
           (and (= :wood selected) (repairable-building? bl))
           (-> (update-in state [:buildings blp] repair-building)
               (assoc-in [:buildings blp :repair-spawn] *tick*)
-              (update-in [:players pid] steal-player :wood 1))
+              (update-in [:players pid] steal :wood))
           :else
           state)))
 
@@ -275,14 +250,10 @@
                        (if-let [beneficary (and (ready? (:gold-spawn player) (seconds 10))
                                                 (:owner (world (->tilep (:p player)))))]
                          (-> (assoc-in ps [(:i player) :gold-spawn] *tick*)
-                             (update-in [beneficary :inventar] add-items :gold 1))
+                             (update beneficary give :gold))
                          ps))
                      players
                      players)))
-
-(defn player-has? [{:keys [inventar]} x n]
-  (some #(and (= (first %) x) (<= n (second %)))
-        inventar))
 
 (defmulti step-building (fn [state bl] (:type bl)))
 
@@ -300,13 +271,13 @@
 
 (defmethod step-building :carpenter [{:keys [buildings world players] :as state} {:keys [p] :as bl}]
   (let [owner (get-in world [(->tilep p) :owner])]
-    (if-let [target (and (player-has? (players owner) :wood 1)
+    (if-let [target (and (get-in players [owner :inventar :wood])
                          (->> (get-map-part buildings p [4 4])
                               (filter repairable-building?)
                               (sort-by #(or (:repair-spawn %) 0) >)
                               first))]
       (-> (assoc-in state [:buildings p :working] true)
-          (update-in [:players owner] steal-player :wood 1)
+          (update-in [:players owner] steal :wood)
           (update :carpenters conj
                   {:p p
                    :home p
@@ -351,60 +322,16 @@
        (filter ready?)
        (preduce step-building state)))
 
-(defn scrollip
-  [{:keys [inventar inventar-p inventar-category-p open-chest] :as player} x {:keys [chests]}]
-  (let [items (get chests open-chest)]
-    (cond (#{:dec :inc} x)
-          (assoc player
-            :inventar-p (mod (({:dec dec :inc inc} x) inventar-p)
-                             (count (if (= inventar-category-p :inventar)
-                                      inventar
-                                      items))))
-          (< 0 (count items))
-          (assoc player
-            :inventar-category-p ({:inventar :chest
-                                   :chest :inventar} inventar-category-p)
-            :inventar-p (mod inventar-p (count (get chests open-chest))))
-          true
-          player)))
+(defn scrollip [{:keys [inventar] :as player} direction]
+  (update player :inventar-p scroll-items inventar direction))
 
-(defn build [{:keys [players] :as state} pid xs]
+(defn build [{:keys [players] :as state} pid reward]
   (let [player (players pid)
-        r (recipes xs)]
-    (if (and r
-             (every? (fn [[y n]]
-                       (player-has? player y n))
-                     r))
-      (assoc state
-        :players (assoc players
-                   pid (reduce (fn [pl x]
-                                 (give-player pl x 1))
-                               (reduce (fn [pl [y n]]
-                                         (steal-player pl y n))
-                                       player
-                                       r)
-                               xs)))
+        cost (recipes reward)]
+    (if (and cost (bag>= (get-in players [pid :inventar]) cost))
+      (update-in state [:players pid] #(-> (steal % cost)
+                                           (give reward)))
       state)))
-
-(defn move-item [{:keys [chests players] :as state} pid]
-  (let [{:keys [inventar inventar-p inventar-category-p open-chest energy] :as player} (get players pid)]
-    (if open-chest
-      (if (= inventar-category-p :inventar)
-        (let [selected (first (nth inventar inventar-p))]
-          (assoc state
-            :players (assoc players
-                       pid (steal-player player selected 1))
-            :chests (update-in chests [open-chest] add-items selected 1)))
-        (let [selected (first (nth (chests open-chest) inventar-p))]
-          (assoc state
-            :players (assoc players
-                       pid (give-player player selected 1))
-            :chests (update-in chests [open-chest] sub-items selected 1))))
-      (let [selected (first (nth inventar inventar-p))]
-        (if (#{:pear :steak-fried} selected)
-          (update-in state [:players pid] #(assoc (steal-player % selected 1)
-                                             :energy (min 200 (+ energy 1))))
-          state)))))
 
 (defn exec-message [state msg]
   (condp = (first msg)
@@ -414,8 +341,7 @@
                :walk (walk state pid (second cmd))
                :shot (shot state pid (second cmd))
                :close-chest (assoc-in state [:players pid :open-chest] nil)
-               :scrollip (update-in state [:players pid] scrollip (second cmd) state)
-               :move-item (move-item state pid)
+               :scrollip (update-in state [:players pid] scrollip (second cmd))
                :build (build state pid (second cmd))))))
 
 (defn exec-messages [state msgs]
